@@ -309,6 +309,20 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
   const chipOff = 'bg-[#FFFCF7] text-[#2F2923] border-[#D2BFA7] hover:border-[#6B5744]/60';
   const baseMaking = round2(applyStatePremium(baseMakingFor(product.labour_per_gram, product.weight_options, stagedStd), statePremiumPct));
   const currentWeightSlabs = weightSlabsFor(product.weight_options, stagedStd, mode);
+  const displayedWeightSlabs = useMemo(() => {
+    return currentWeightSlabs.map(sl => ({
+      ...sl,
+      making: round2(applyStatePremium(sl.making, statePremiumPct))
+    }));
+  }, [currentWeightSlabs, statePremiumPct]);
+
+  const displayedTiers = useMemo(() => {
+    return (tiersForMode(product.tiers, mode) || []).map(t => ({
+      ...t,
+      price_per_gram: round2(applyStatePremium(t.price_per_gram, statePremiumPct)),
+      discount_price_per_gram: t.discount_price_per_gram !== null ? round2(applyStatePremium(t.discount_price_per_gram, statePremiumPct)) : null
+    }));
+  }, [product.tiers, mode, statePremiumPct]);
   const stagedPieceWeight = pieceWeight(stagedStd, stagedSize);
   const stagedStdMoqGrams = (mode === 'ON_ORDER' && currentWeightSlabs.length > 0) ? currentWeightSlabs[0].min_g : 0;
 
@@ -335,6 +349,11 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
             <span className="text-xs font-semibold text-[#766B60]">/g incl. GST</span>
           </p>
           <p className="text-[11px] text-[#766B60]">Making {formatINR(baseMaking)}/g at {formatGrams(stagedStd)}</p>
+          {statePremiumPct > 0 && (
+            <div className="mt-2 bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl px-2.5 py-1.5 text-xs text-[#6B5744] flex items-center gap-1.5 font-medium">
+              <span>Includes <strong>+{statePremiumPct}%</strong> extra labour charge for <strong>{account?.state || 'your state'}</strong>.</span>
+            </div>
+          )}
         </div>
 
         {product.description && <p className="text-xs text-[#766B60]">{product.description}</p>}
@@ -504,7 +523,7 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
             {currentWeightSlabs.length > 0 ? (
               <WeightSlabStrip
                 title={`Get discount- ${formatGrams(stagedStd)}`}
-                slabs={currentWeightSlabs}
+                slabs={displayedWeightSlabs}
                 silverRate={silverRate}
                 baseMaking={previewMaking.mrp}
                 netGrams={previewStdGrams}
@@ -513,7 +532,7 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
             ) : (
               <SlabPriceStrip
                 title={`Get discount- ${formatGrams(stagedStd)}`}
-                tiers={tiersForMode(product.tiers, mode)}
+                tiers={displayedTiers}
                 silverRate={silverRate}
                 baseMaking={previewMaking.mrp}
                 pieceWeight={stagedPieceWeight}

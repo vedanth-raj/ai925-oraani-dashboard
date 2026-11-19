@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-title AI925 & Oraani System Rollback Utility
+title "AI925 & Oraani System Rollback Utility"
 cd /d "%~dp0"
 
 echo ======================================================

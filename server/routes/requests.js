@@ -6,6 +6,7 @@ const { authenticateToken, requireAdminOrBusinessAdmin, requireAdmin, logAudit, 
 const bcrypt = require('bcryptjs');
 const { encrypt, decrypt } = require('../utils/secrets');
 const { deleteCustomerCompletely } = require('../services/customerCascade');
+const { detectStateFromText } = require('../utils/pricing');
 
 const newId = prefix => prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
 
@@ -191,6 +192,7 @@ function activateAccount(account, approverId) {
   const now = new Date().toISOString();
   const accountBrand = account.brand || 'AI925';
   const cleanPhone = normalizePhone(account.phone);
+  const resolvedState = account.state || detectStateFromText(account.address) || '';
   let customer = db.prepare("SELECT id FROM customers WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?) AND is_archived = 0").get(cleanPhone, cleanPhone);
   if (!customer) {
     const customerId = cleanPhone ? 'cust_' + cleanPhone : 'cust_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
@@ -199,17 +201,19 @@ function activateAccount(account, approverId) {
 
     db.prepare(`
       INSERT INTO customers (
-        id, poc_name, company_name, phone, email, address, zone, notes, category, country, brand,
+        id, poc_name, company_name, phone, email, address, state, zone, notes, category, country, brand,
         created_by_id, rep_edit_count, is_archived, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'West', 'Registered via customer portal', ?, 'India', ?, ?, 0, 0, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'West', 'Registered via customer portal', ?, 'India', ?, ?, 0, 0, ?, ?)
     `).run(finalId, account.full_name, account.company_name || account.full_name, cleanPhone, account.email, account.address,
-      account.account_type || 'Retailer', accountBrand, approverId, now, now);
+      resolvedState, account.account_type || 'Retailer', accountBrand, approverId, now, now);
     if (account.pin_code) db.prepare('UPDATE customers SET pin_code = ? WHERE id = ?').run(account.pin_code, finalId);
     customer = { id: finalId };
   } else {
-    db.prepare('UPDATE customers SET brand = COALESCE(brand, ?), phone = ? WHERE id = ?').run(accountBrand, cleanPhone, customer.id);
+    db.prepare("UPDATE customers SET brand = COALESCE(brand, ?), phone = ?, state = COALESCE(NULLIF(state, ''), ?) WHERE id = ?")
+      .run(accountBrand, cleanPhone, resolvedState, customer.id);
   }
-  db.prepare("UPDATE customer_accounts SET status = 'APPROVED', customer_id = ?, updated_at = ? WHERE id = ?").run(customer.id, now, account.id);
+  db.prepare("UPDATE customer_accounts SET status = 'APPROVED', customer_id = ?, state = COALESCE(NULLIF(state, ''), ?), updated_at = ? WHERE id = ?")
+    .run(customer.id, resolvedState, now, account.id);
 }
 
 // DELETE /api/requests/customer-accounts/:id

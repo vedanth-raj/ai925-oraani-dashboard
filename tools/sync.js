@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const REPO_OWNER = 'vedanth-raj';
 const REPO_NAME = 'ai925-oraani-dashboard';
@@ -234,16 +234,16 @@ function copyFolderExcludingData(src, dest) {
 
 function listGitVersions(limit = 25) {
   try {
-    const raw = execSync(`git log -n ${limit} --format="%H|%ad|%s" --date=format:"%Y-%m-%d %H:%M:%S"`, {
+    const raw = execFileSync('git', ['log', `-n`, String(limit), '--format=%H~~~%ad~~~%s', '--date=format:%Y-%m-%d %H:%M:%S'], {
       cwd: ROOT_DIR,
       stdio: ['ignore', 'pipe', 'ignore']
     }).toString().trim();
     if (!raw) return [];
     return raw.split('\n').filter(Boolean).map(line => {
-      const parts = line.split('|');
+      const parts = line.split('~~~');
       const sha = parts[0] || '';
       const date = parts[1] || '';
-      const message = parts.slice(2).join('|') || 'Update';
+      const message = parts.slice(2).join('~~~') || 'Update';
       return {
         type: 'git',
         sha,
@@ -421,5 +421,6 @@ module.exports = {
   createSnapshot,
   listSnapshots,
   applyUpdate,
-  restoreSnapshot
+  restoreSnapshot,
+  listGitVersions
 };

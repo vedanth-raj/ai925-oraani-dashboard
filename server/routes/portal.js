@@ -13,7 +13,7 @@ const {
   clearLoginAttempts
 } = require('../middleware/auth');
 const { uploadsSubdir, storeUploadedFile, removeUpload, imageFileFilter } = require('../utils/files');
-const { round2, getCurrentSilverRate, getVariants, getTiers, getWeightOptions, productPricing, MIN_ORDER_GRAMS, productImages, getStatePremium, getAllWeightSlabDiscounts, getWeightSlabDiscount } = require('../utils/pricing');
+const { round2, getCurrentSilverRate, getVariants, getTiers, getWeightOptions, productPricing, MIN_ORDER_GRAMS, productImages, getStatePremium, getAllWeightSlabDiscounts, getWeightSlabDiscount, detectStateFromText } = require('../utils/pricing');
 const { buildPricedItems, sumPricing, insertOrder } = require('../services/orders');
 const { PAYMENT_METHODS, paymentOptions, payWithPlan } = require('../services/payments');
 const { customerPin, deliveryChargeFor, getPaymentTerms } = require('../services/commerce');
@@ -44,7 +44,7 @@ const newId = prefix => prefix + '_' + Date.now().toString(36) + '_' + Math.rand
 
 function publicAccount(id) {
   const account = db.prepare(`
-    SELECT id, full_name, company_name, phone, email, address, pin_code, id_card_path, status,
+    SELECT id, full_name, company_name, phone, email, address, pin_code, state, id_card_path, status,
       biz_approved_at, sys_approved_at, rejected_reason, customer_id, password_changed_at, created_at,
       account_type, can_view_ready, can_view_order, brand
     FROM customer_accounts WHERE id = ?
@@ -54,10 +54,13 @@ function publicAccount(id) {
   account.can_view_order = account.can_view_order !== 0;
   account.brand = account.brand || 'AI925';
 
-  let customerState = null;
-  if (account.customer_id) {
+  let customerState = account.state || null;
+  if (!customerState && account.customer_id) {
     const cust = db.prepare('SELECT state FROM customers WHERE id = ?').get(account.customer_id);
     customerState = cust ? cust.state : null;
+  }
+  if (!customerState && account.address) {
+    customerState = detectStateFromText(account.address);
   }
   account.state = customerState;
   account.state_premium_pct = getStatePremium(customerState);
@@ -93,6 +96,8 @@ router.post('/register', uploadIdCard.single('id_card'), (req, res) => {
   const address = String(req.body.address || '').trim();
   const pinRaw = String(req.body.pin_code || '').trim();
   const pinCode = normalizePin(pinRaw);
+  const stateRaw = String(req.body.state || '').trim();
+  const state = stateRaw || detectStateFromText(address);
   const password = String(req.body.password || '');
   const accountType = String(req.body.account_type || '').trim();
   const brand = String(req.body.brand || '').toUpperCase() === 'ORAANI' ? 'ORAANI' : 'AI925';
@@ -126,10 +131,10 @@ router.post('/register', uploadIdCard.single('id_card'), (req, res) => {
   db.transaction(() => {
     db.prepare(`
       INSERT INTO customer_accounts (
-        id, full_name, company_name, phone, email, address, pin_code, password_hash, password_enc, id_card_path,
+        id, full_name, company_name, phone, email, address, pin_code, state, password_hash, password_enc, id_card_path,
         account_type, brand, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-    `).run(id, fullName, companyName || null, phone, email, address, pinCode, bcrypt.hashSync(password, 10), passwordEnc, idCardPath,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+    `).run(id, fullName, companyName || null, phone, email, address, pinCode, state, bcrypt.hashSync(password, 10), passwordEnc, idCardPath,
       accountType, brand, now, now);
     db.prepare(`
       INSERT INTO customer_password_history (id, customer_account_id, password_enc, source, created_at)
@@ -211,7 +216,7 @@ function publicWeightOption(o) {
   };
 }
 
-function catalogProduct(p, rate) {
+function catalogProduct(p, rate, statePremiumPct = 0) {
   const variants = getVariants(p.id);
   const tiers = getTiers(p.id);
   const sizes = readySizes(p, variants);
@@ -228,6 +233,7 @@ function catalogProduct(p, rate) {
     image_paths: productImages(p),
     std_weight_per_20in: p.std_weight_per_20in,
     labour_per_gram: p.labour_per_gram || 0,
+    state_premium_pct: statePremiumPct,
     sizes,
     tiers,
     weight_options: getWeightOptions(p.id).map(publicWeightOption),
@@ -259,14 +265,16 @@ router.get('/products', authenticateCustomer, requireApprovedCustomer, (req, res
   query += ' ORDER BY p.name ASC';
 
   const rate = getCurrentSilverRate();
-  let products = db.prepare(query).all(...params).map(p => catalogProduct(p, rate.rate_per_gram));
+  const customerAcct = publicAccount(req.customer.id);
+  const statePremiumPct = customerAcct ? (customerAcct.state_premium_pct || 0) : 0;
+  let products = db.prepare(query).all(...params).map(p => catalogProduct(p, rate.rate_per_gram, statePremiumPct));
   if (mode === 'ready') {
     products = products.filter(p => p.ready_stock > 0);
   }
 
   const categories = db.prepare('SELECT name FROM categories WHERE is_archived = 0 ORDER BY created_at ASC').all().map(c => c.name);
   const discounts = getAllWeightSlabDiscounts().filter(d => Boolean(d.is_active));
-  res.json({ products, categories, silver_rate: rate, weight_slab_discounts: discounts });
+  res.json({ products, categories, silver_rate: rate, weight_slab_discounts: discounts, state_premium_pct: statePremiumPct });
 });
 
 // GET /api/portal/products/:id
@@ -287,8 +295,10 @@ router.get('/products/:id', authenticateCustomer, requireApprovedCustomer, (req,
     return res.status(404).json({ error: 'Product not found' });
   }
   const rate = getCurrentSilverRate();
+  const customerAcct = publicAccount(req.customer.id);
+  const statePremiumPct = customerAcct ? (customerAcct.state_premium_pct || 0) : 0;
   const discounts = getAllWeightSlabDiscounts().filter(d => Boolean(d.is_active));
-  res.json({ product: catalogProduct(p, rate.rate_per_gram), silver_rate: rate, weight_slab_discounts: discounts });
+  res.json({ product: catalogProduct(p, rate.rate_per_gram, statePremiumPct), silver_rate: rate, weight_slab_discounts: discounts, state_premium_pct: statePremiumPct });
 });
 
 // POST /api/portal/stock-requests ("Request from seller" for an unavailable size)

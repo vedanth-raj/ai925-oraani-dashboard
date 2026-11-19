@@ -370,6 +370,7 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
         status,
         image_path: imagePaths[0] || null,
         image_paths: imagePaths,
+        thickness: usedWeights[0]?.thickness || '',
         variants: usedReady.map(r => ({ std_weight_g: r.std_weight_g, size_inches: r.size_inches, stock_qty: r.stock_qty || '0' })),
         weight_columns: columns,
         weight_options: usedWeights.map(r => ({

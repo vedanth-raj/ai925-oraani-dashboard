@@ -374,7 +374,7 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
         labour,
         JSON.stringify(tables.columns || []),
         JSON.stringify(storedImages),
-        summary.thickness ?? (thickness || '2.0 mm')
+        summary.thickness ?? (thickness ? (String(thickness).includes('mm') ? String(thickness).trim() : String(thickness).trim() + ' mm') : '2.0 mm')
       );
 
       // Log initial stock intake in inventory movement ledger
@@ -442,6 +442,8 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
   const now = new Date().toISOString();
   const weight = summary.std_weight_per_20in || parseFloat(std_weight_per_20in) || product.std_weight_per_20in;
   const labourValue = summary.labour_per_gram ?? (labour_per_gram !== undefined && labour_per_gram !== '' ? Math.max(0, parseFloat(labour_per_gram) || 0) : null);
+  const rawThk = thickness !== undefined && thickness !== null ? String(thickness).trim() : '';
+  const finalThickness = summary.thickness || (rawThk ? (rawThk.includes('mm') ? rawThk : rawThk + ' mm') : product.thickness);
   const finalName = name ? name.trim() : product.name;
   const finalSku = sku ? sku.trim() : product.sku;
   const oldImages = productImages(product);
@@ -456,7 +458,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
           sku = COALESCE(?, sku),
           category_id = COALESCE(?, category_id),
           wire_size = COALESCE(?, wire_size),
-          thickness = COALESCE(?, thickness),
+          thickness = ?,
           endings = COALESCE(?, endings),
           lock_type = COALESCE(?, lock_type),
           std_weight_per_20in = ?,
@@ -474,7 +476,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
         sku ? sku.trim() : null,
         category_id !== undefined ? category_id : null,
         summary.wire_size ?? wire_size,
-        summary.thickness ?? thickness,
+        finalThickness,
         summary.endings ?? endings,
         summary.lock_type || lock_type,
         weight,

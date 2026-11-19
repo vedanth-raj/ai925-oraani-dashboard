@@ -756,7 +756,18 @@ function initializeSchema() {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_state_premiums_state ON state_premiums(state);
+    `);
 
+    const existingPremiums = db.prepare('SELECT COUNT(*) as count FROM state_premiums').get();
+    if (existingPremiums && existingPremiums.count === 0) {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO state_premiums (id, state, premium_pct, is_active, created_at, updated_at)
+        VALUES ('prem_goa', 'Goa', 20.0, 1, ?, ?)
+      `).run(now, now);
+    }
+
+    db.exec(`
       CREATE TABLE IF NOT EXISTS delivery_pincodes (
         pincode TEXT PRIMARY KEY,
         charge REAL NOT NULL DEFAULT 0,
@@ -808,6 +819,38 @@ function initializeSchema() {
         }
         db.prepare("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('weight_options_seeded', '1', ?)").run(now);
       })();
+    }
+
+    // 21. State on customer_accounts for region-specific pricing
+    const acctCols3 = db.prepare("PRAGMA table_info(customer_accounts)").all().map(c => c.name);
+    if (!acctCols3.includes('state')) {
+      db.prepare("ALTER TABLE customer_accounts ADD COLUMN state TEXT").run();
+    }
+    const INDIAN_STATES_LIST = [
+      'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+      'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+      'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+      'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+      'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+      'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir',
+      'Ladakh', 'Chandigarh', 'Puducherry'
+    ];
+    function inferState(text) {
+      if (!text) return null;
+      for (const st of INDIAN_STATES_LIST) {
+        if (new RegExp(`(^|[^a-zA-Z0-9])${st}([^a-zA-Z0-9]|$)`, 'i').test(String(text))) return st;
+      }
+      return null;
+    }
+    const emptyAccts = db.prepare("SELECT id, address FROM customer_accounts WHERE (state IS NULL OR state = '') AND address IS NOT NULL").all();
+    for (const a of emptyAccts) {
+      const st = inferState(a.address);
+      if (st) db.prepare("UPDATE customer_accounts SET state = ? WHERE id = ?").run(st, a.id);
+    }
+    const emptyCusts = db.prepare("SELECT id, address FROM customers WHERE (state IS NULL OR state = '') AND address IS NOT NULL").all();
+    for (const c of emptyCusts) {
+      const st = inferState(c.address);
+      if (st) db.prepare("UPDATE customers SET state = ? WHERE id = ?").run(st, c.id);
     }
   } catch (migErr) {
     console.warn('Database schema migration notice:', migErr.message);

@@ -219,6 +219,26 @@ function pickWeightSlab(slabs, grams, mode) {
   return list.find(s => s.max_g === null || grams <= s.max_g + 1e-9) || list[list.length - 1];
 }
 
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir',
+  'Ladakh', 'Chandigarh', 'Puducherry'
+];
+
+function detectStateFromText(text) {
+  if (!text) return null;
+  const str = String(text);
+  for (const st of INDIAN_STATES) {
+    const reg = new RegExp(`(^|[^a-zA-Z0-9])${st}([^a-zA-Z0-9]|$)`, 'i');
+    if (reg.test(str)) return st;
+  }
+  return null;
+}
+
 // State-wise premium pricing lookup (e.g., Goa +100% / 2x multiplier)
 function getStatePremium(stateName) {
   if (!stateName) return 0;
@@ -368,5 +388,7 @@ module.exports = {
   getStatePremium,
   getAllStatePremiums,
   getWeightSlabDiscount,
-  getAllWeightSlabDiscounts
+  getAllWeightSlabDiscounts,
+  INDIAN_STATES,
+  detectStateFromText
 };

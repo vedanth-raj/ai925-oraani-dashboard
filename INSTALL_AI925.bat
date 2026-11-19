@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
 
-title AI925 & Oraani Order Management System - Automated Installer
+title "AI925 & Oraani Order Management System - Automated Installer"
 color 0A
 
 echo ==============================================================================
-echo        AI925 & ORAANI ORDER MANAGEMENT SYSTEM - 1-CLICK AUTO INSTALLER        
+echo        AI925 ^& ORAANI ORDER MANAGEMENT SYSTEM - 1-CLICK AUTO INSTALLER        
 echo ==============================================================================
 echo.
 echo Installing and setting up everything automatically. Please do not close this window.

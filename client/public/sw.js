@@ -3,7 +3,7 @@
 // - Hashed build files (/assets/*) and icons: cache first; they never change under the same name
 // - API answers and uploaded files: never cached on the device, so customer, order and user data cannot be
 //   read back from the browser cache by the next person using the phone
-const CACHE_NAME = 'ai925-shell-v9';
+const CACHE_NAME = 'ai925-shell-v10';
 const SHELL = [
   '/',
   '/oraani',
@@ -56,11 +56,11 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }
           return response;
         })
-        .catch(() => caches.match('/'))
+        .catch(() => caches.match(request).then((cached) => cached || (url.pathname.includes('oraani') ? caches.match('/oraani') : caches.match('/'))))
     );
     return;
   }

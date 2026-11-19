@@ -14,6 +14,16 @@ interface CustomerAuthScreenProps {
 const field = 'w-full px-4 py-2.5 bg-[#FFFCF7] border border-[#D2BFA7] rounded-xl text-sm text-[#2F2923] placeholder-[#766B60]/60 focus:outline-none focus:ring-2 focus:ring-[#6B5744]/30 focus:border-[#6B5744]';
 const label = 'block text-[11px] font-bold text-[#766B60] uppercase tracking-wider mb-1.5';
 
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir',
+  'Ladakh', 'Chandigarh', 'Puducherry'
+];
+
 export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, onSwitchMode, onBack }) => {
   const { signIn, register } = useCustomerSession();
   const activeBrand = getActiveBrand();
@@ -28,6 +38,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [pinCode, setPinCode] = useState('');
+  const [selectedState, setSelectedState] = useState('');
   const [idCard, setIdCard] = useState<File | null>(null);
   const [idCardPreview, setIdCardPreview] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<AccountType | null>(null);
@@ -73,6 +84,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         fd.append('email', email.trim());
         fd.append('address', address.trim());
         fd.append('pin_code', pinCode.trim());
+        fd.append('state', selectedState.trim());
         fd.append('password', password);
         fd.append('account_type', accountType || '');
         fd.append('brand', activeBrand);
@@ -158,9 +170,25 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                 <label className={label} htmlFor="su-address">Address *</label>
                 <textarea id="su-address" rows={2} className={`${field} resize-none`} value={address} onChange={e => setAddress(e.target.value)} autoComplete="street-address" placeholder="Shop / delivery address" />
               </div>
-              <div>
-                <label className={label} htmlFor="su-pin">PIN code <span className="normal-case font-semibold">(for delivery charges)</span></label>
-                <input id="su-pin" inputMode="numeric" maxLength={6} className={field} value={pinCode} onChange={e => setPinCode(e.target.value.replace(/\D/g, ''))} autoComplete="postal-code" placeholder="e.g. 400001" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={label} htmlFor="su-pin">PIN code <span className="normal-case font-semibold">(delivery)</span></label>
+                  <input id="su-pin" inputMode="numeric" maxLength={6} className={field} value={pinCode} onChange={e => setPinCode(e.target.value.replace(/\D/g, ''))} autoComplete="postal-code" placeholder="e.g. 400001" />
+                </div>
+                <div>
+                  <label className={label} htmlFor="su-state">State</label>
+                  <select
+                    id="su-state"
+                    className={field}
+                    value={selectedState}
+                    onChange={e => setSelectedState(e.target.value)}
+                  >
+                    <option value="">Select state...</option>
+                    {INDIAN_STATES.map(st => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Optional GST / ID card image */}

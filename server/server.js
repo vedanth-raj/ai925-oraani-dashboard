@@ -137,6 +137,7 @@ if (fs.existsSync(CLIENT_DIST)) {
     res.setHeader('Cache-Control', 'no-cache');
     const indexPath = path.join(CLIENT_DIST, 'index.html');
     const isOraani = req.path.toLowerCase().startsWith('/oraani') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/oraani'));
+    const isAi925 = req.path.toLowerCase().startsWith('/ai925') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/ai925'));
 
     if (isOraani && fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf8');
@@ -147,7 +148,13 @@ if (fs.existsSync(CLIENT_DIST)) {
         .replace(/href="\/icon\.svg"/g, 'href="/oraani-logo.svg"')
         .replace(/href="\/icon-192\.png"/g, 'href="/oraani-icon-192.png"')
         .replace(/href="\/icon-512\.png"/g, 'href="/oraani-icon-512.png"')
-        .replace(/href="\/apple-touch-icon\.png"/g, 'href="/oraani-apple-touch-icon.png"');
+        .replace(/href="\/apple-touch-icon\.png"/g, 'href="/oraani-apple-touch-icon.png"')
+        .replace('</head>', '<script>window.__INITIAL_BRAND__="ORAANI";</script></head>');
+      return res.type('html').send(html);
+    }
+    if (isAi925 && fs.existsSync(indexPath)) {
+      let html = fs.readFileSync(indexPath, 'utf8');
+      html = html.replace('</head>', '<script>window.__INITIAL_BRAND__="AI925";</script></head>');
       return res.type('html').send(html);
     }
     res.sendFile(indexPath);

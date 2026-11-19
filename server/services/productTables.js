@@ -67,11 +67,14 @@ function parseWeightOptions(options, columns) {
       const v = text(o.extra && o.extra[col]);
       if (v) extra[col] = v;
     }
+    const rawThk = text(o.thickness, 60);
+    const thk = rawThk ? (rawThk.includes('mm') ? rawThk : rawThk + ' mm') : (o.wire_size ? (String(o.wire_size).includes('mm') ? String(o.wire_size) : String(o.wire_size) + ' mm') : null);
     return {
       std_weight_g: round2(std * 1000) / 1000,
       making_charge: making === null ? null : round2(making),
       sku_code: text(o.sku_code, 60),
       wire_size: text(o.wire_size, 60),
+      thickness: thk,
       endings: text(o.endings, 60),
       lock_type: text(o.lock_type, 60),
       extra,
@@ -182,7 +185,8 @@ function saveWeightOptions(productId, rows) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const r of rows) {
-    const thk = r.thickness || (r.wire_size ? (r.wire_size.includes('mm') ? r.wire_size : r.wire_size + ' mm') : null);
+    const raw = r.thickness ? String(r.thickness).trim() : '';
+    const thk = raw ? (raw.includes('mm') ? raw : raw + ' mm') : (r.wire_size ? (r.wire_size.includes('mm') ? r.wire_size : r.wire_size + ' mm') : null);
     insert.run(newRowId('wopt'), productId, r.std_weight_g, r.making_charge, r.sku_code, r.wire_size, r.endings, r.lock_type,
       JSON.stringify(r.extra || {}), JSON.stringify(r.weight_slabs || []), r.sort_order, now, thk);
   }
@@ -205,11 +209,13 @@ function summaryFromOptions(options) {
   const first = options && options[0];
   if (!first) return null;
   const priced = options.find(o => o.making_charge !== null);
+  const rawThk = first.thickness ? String(first.thickness).trim() : '';
+  const finalThk = rawThk ? (rawThk.includes('mm') ? rawThk : rawThk + ' mm') : (first.wire_size ? (first.wire_size.includes('mm') ? first.wire_size : first.wire_size + ' mm') : '2.0 mm');
   return {
     std_weight_per_20in: first.std_weight_g,
     labour_per_gram: priced ? priced.making_charge : null,
     wire_size: first.wire_size,
-    thickness: first.thickness || (first.wire_size ? (first.wire_size.includes('mm') ? first.wire_size : first.wire_size + ' mm') : '2.0 mm'),
+    thickness: finalThk,
     endings: first.endings,
     lock_type: first.lock_type || null
   };

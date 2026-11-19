@@ -16,7 +16,7 @@ export const StatePremiumCard: React.FC = () => {
   const [premiums, setPremiums] = useState<StatePremium[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedState, setSelectedState] = useState('Goa');
-  const [premiumPct, setPremiumPct] = useState('100');
+  const [premiumPct, setPremiumPct] = useState('20');
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

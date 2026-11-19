@@ -541,6 +541,12 @@ router.put('/:id', authenticateToken, (req, res) => {
     id
   );
 
+  if (state !== undefined && state) {
+    try {
+      db.prepare('UPDATE customer_accounts SET state = ? WHERE customer_id = ? OR phone = ?').run(String(state).trim(), id, customer.phone);
+    } catch {}
+  }
+
   // If Admin or Business Admin assigns or changes representative
   if (!isRep && assigned_rep_id !== undefined) {
     const finalCompName = company_name ? company_name.trim() : customer.company_name;

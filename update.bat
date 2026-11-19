@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-title AI925 & Oraani System Live Updater
+title "AI925 & Oraani System Live Updater"
 cd /d "%~dp0"
 
 echo ======================================================

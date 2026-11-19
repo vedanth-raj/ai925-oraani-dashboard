@@ -28,7 +28,7 @@ export const BRANDS: Record<Brand, BrandConfig> = {
     code: 'ORAANI',
     displayName: 'Oraani',
     tagline: 'Oraani Jewels — Contemporary Silver Creations',
-    logoUrl: '/oraani-logo.png',
+    logoUrl: '/oraani-logo.svg',
     companyName: 'Oraani Silver',
     supportPhone: '+91 98200 00000',
     portalPath: '/oraani',
@@ -60,6 +60,13 @@ function safeGetStorage(): string | null {
  */
 export function detectBrand(): Brand {
   if (typeof window === 'undefined') return 'AI925';
+
+  // 0. Server-injected brand hint for direct route visits
+  const serverBrand = (window as any).__INITIAL_BRAND__;
+  if (serverBrand === 'ORAANI' || serverBrand === 'AI925') {
+    safeSetStorage(serverBrand);
+    return serverBrand;
+  }
 
   const path = (window.location.pathname || '').toLowerCase();
   const search = (window.location.search || '').toLowerCase();

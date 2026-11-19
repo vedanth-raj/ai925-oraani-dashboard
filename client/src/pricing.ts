@@ -177,7 +177,8 @@ export function makingFor(
   }
   const labour = round2(applyStatePremium(rawLabour, statePremiumPct));
   const mrp = round2(applyStatePremium(rawMrp, statePremiumPct));
-  return { labour, mrp, tier, weightSlab };
+  const scaledSlab = weightSlab ? { ...weightSlab, making: round2(applyStatePremium(weightSlab.making, statePremiumPct)) } : null;
+  return { labour, mrp, tier, weightSlab: scaledSlab };
 }
 
 // Discount on the full per-gram rate (silver + base making), so it reads the same at any weight.
