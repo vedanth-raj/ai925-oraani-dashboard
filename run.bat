@@ -136,6 +136,14 @@ node tools\sync.js check
 :start_server
 echo [INFO] Starting AI925 Server...
 node launch.js
+set "EXIT_CODE=%ERRORLEVEL%"
+
+if %EXIT_CODE% EQU 42 (
+    echo [INFO] Automatic update applied. Restarting server instantly...
+    timeout /t 2 >nul
+    goto start_server
+)
+
 echo.
 echo [INFO] Server stopped.
 echo Press any key to restart AI925 Server, or close this window to exit.

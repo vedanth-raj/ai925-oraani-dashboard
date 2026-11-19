@@ -192,7 +192,10 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
           console.log('[LIVE AUTO-SYNC] Applying update safely with automatic backup...');
           const res = await sync.applyUpdate(remote);
           if (res.success) {
-            console.log('[LIVE AUTO-SYNC] Update applied cleanly! Running latest version.\n');
+            console.log('[LIVE AUTO-SYNC] Update applied cleanly! Restarting system to load fresh build...\n');
+            setTimeout(() => {
+              process.exit(42);
+            }, 1000);
           }
         }
       } catch (e) {
