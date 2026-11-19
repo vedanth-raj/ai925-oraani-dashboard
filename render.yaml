@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ai925-order-management
+    env: node
+    plan: free
+    buildCommand: npm install && npm --prefix client install && npm --prefix client run build
+    startCommand: node server/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: TRUST_PROXY
+        value: "1"
+    disk:
+      name: ai925-data
+      mountPath: /app/data
+      sizeGB: 1

@@ -1,0 +1,253 @@
+import React, { useState } from 'react';
+import { ArrowLeft, Eye, EyeOff, IdCard, Loader2, Trash2, Upload } from 'lucide-react';
+import { useCustomerSession } from './customerSession';
+import { compressImage } from '../utils/imageCompressor';
+import { ACCOUNT_TYPES, type AccountType } from '../api';
+import { getBrandConfig, getActiveBrand } from '../brand';
+
+interface CustomerAuthScreenProps {
+  mode: 'signin' | 'signup';
+  onSwitchMode: (mode: 'signin' | 'signup') => void;
+  onBack: () => void;
+}
+
+const field = 'w-full px-4 py-2.5 bg-[#FFFCF7] border border-[#D2BFA7] rounded-xl text-sm text-[#2F2923] placeholder-[#766B60]/60 focus:outline-none focus:ring-2 focus:ring-[#6B5744]/30 focus:border-[#6B5744]';
+const label = 'block text-[11px] font-bold text-[#766B60] uppercase tracking-wider mb-1.5';
+
+export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, onSwitchMode, onBack }) => {
+  const { signIn, register } = useCustomerSession();
+  const activeBrand = getActiveBrand();
+  const brandConfig = getBrandConfig(activeBrand);
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [pinCode, setPinCode] = useState('');
+  const [idCard, setIdCard] = useState<File | null>(null);
+  const [idCardPreview, setIdCardPreview] = useState<string | null>(null);
+  const [accountType, setAccountType] = useState<AccountType | null>(null);
+  const [rememberMe, setRememberMe] = useState(false); // unticked by default
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isSignUp = mode === 'signup';
+
+  const handleIdCard = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const compressed = await compressImage(file);
+    setIdCard(compressed);
+    setIdCardPreview(URL.createObjectURL(compressed));
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (isSignUp) {
+      const digits = phone.replace(/\D/g, '');
+      if (!fullName.trim()) return setError('Please enter your name');
+      if (!accountType) return setError('Please choose Retailer, Wholesaler or Both');
+      if (digits.length < 10) return setError('Please enter a valid 10-digit mobile number');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('Please enter a valid email address');
+      if (!address.trim()) return setError('Please enter your address');
+      if (pinCode.trim() && !/^\d{6}$/.test(pinCode.trim())) return setError('Please enter a valid 6-digit PIN code');
+      if (password.length < 6) return setError('Password must be at least 6 characters');
+      if (password !== confirm) return setError('Passwords do not match');
+    } else if (!identifier.trim() || !password) {
+      return setError('Enter your mobile number or email and password');
+    }
+
+    setBusy(true);
+    try {
+      if (isSignUp) {
+        const fd = new FormData();
+        fd.append('full_name', fullName.trim());
+        fd.append('company_name', companyName.trim());
+        fd.append('phone', phone.trim());
+        fd.append('email', email.trim());
+        fd.append('address', address.trim());
+        fd.append('pin_code', pinCode.trim());
+        fd.append('password', password);
+        fd.append('account_type', accountType || '');
+        fd.append('brand', activeBrand);
+        if (idCard) fd.append('id_card', idCard);
+        await register(fd);
+      } else {
+        await signIn(identifier.trim(), password, rememberMe);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F5F0E8] max-w-lg mx-auto px-4 py-5">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-semibold text-[#2F2923] mb-4">
+        <ArrowLeft size={18} /> Back
+      </button>
+
+      <div className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-5 shadow-sm">
+        <img
+          src={brandConfig.logoUrl}
+          alt={brandConfig.displayName}
+          className="h-10 w-auto max-w-[180px] object-contain mb-3"
+        />
+        <h1 className="text-xl font-bold text-[#2F2923]">
+          {isSignUp ? `Create your ${brandConfig.displayName} account` : `Welcome back to ${brandConfig.displayName}`}
+        </h1>
+        <p className="text-xs text-[#766B60] mb-5">
+          {isSignUp
+            ? 'Your profile will be verified by our team before you can buy.'
+            : 'Sign in with the mobile number or email you registered with.'}
+        </p>
+
+        {error && <div className="mb-4 p-3 bg-[#FBE9E9] border border-[#C94C4C]/20 rounded-xl text-xs font-medium text-[#C94C4C]">{error}</div>}
+
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          {isSignUp ? (
+            <>
+              <div>
+                <label className={label} htmlFor="su-name">Full name *</label>
+                <input id="su-name" className={field} value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" placeholder="e.g. Gaurav Agarwal" />
+              </div>
+              <div>
+                <label className={label} htmlFor="su-company">Shop / company name</label>
+                <input id="su-company" className={field} value={companyName} onChange={e => setCompanyName(e.target.value)} autoComplete="organization" placeholder="Optional" />
+              </div>
+              <div role="radiogroup" aria-labelledby="su-type-label">
+                <span id="su-type-label" className={label}>Account type *</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {ACCOUNT_TYPES.map(t => {
+                    const active = accountType === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setAccountType(t)}
+                        className={`py-2.5 rounded-xl text-sm font-bold border transition-all ${
+                          active ? 'bg-[#6B5744] text-white border-[#6B5744]' : 'bg-[#FFFCF7] text-[#2F2923] border-[#D2BFA7] hover:border-[#6B5744]/60'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className={label} htmlFor="su-phone">Mobile number *</label>
+                  <input id="su-phone" type="tel" inputMode="numeric" className={field} value={phone} onChange={e => setPhone(e.target.value)} autoComplete="tel" placeholder="10-digit mobile" />
+                </div>
+                <div>
+                  <label className={label} htmlFor="su-email">Email *</label>
+                  <input id="su-email" type="email" className={field} value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" />
+                </div>
+              </div>
+              <div>
+                <label className={label} htmlFor="su-address">Address *</label>
+                <textarea id="su-address" rows={2} className={`${field} resize-none`} value={address} onChange={e => setAddress(e.target.value)} autoComplete="street-address" placeholder="Shop / delivery address" />
+              </div>
+              <div>
+                <label className={label} htmlFor="su-pin">PIN code <span className="normal-case font-semibold">(for delivery charges)</span></label>
+                <input id="su-pin" inputMode="numeric" maxLength={6} className={field} value={pinCode} onChange={e => setPinCode(e.target.value.replace(/\D/g, ''))} autoComplete="postal-code" placeholder="e.g. 400001" />
+              </div>
+
+              {/* Optional GST / ID card image */}
+              <div>
+                <span className={label}>GST / ID Card <span className="normal-case font-semibold">(optional)</span></span>
+                {idCardPreview ? (
+                  <div className="flex items-center gap-3 p-2 bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl">
+                    <img src={idCardPreview} alt="GST / ID card preview" className="w-20 h-14 object-cover rounded-lg border border-[#D2BFA7]" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-[#2F2923] flex items-center gap-1"><IdCard size={13} /> GST / ID card attached</p>
+                      <p className="text-[11px] text-[#766B60] truncate">{idCard?.name}</p>
+                    </div>
+                    <button type="button" onClick={() => { setIdCard(null); setIdCardPreview(null); }} className="p-2 text-[#C94C4C]" title="Remove">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-3 p-3 border-2 border-dashed border-[#D2BFA7] rounded-xl bg-[#F5F0E8]/40 cursor-pointer hover:bg-[#F5F0E8]">
+                    <Upload size={18} className="text-[#6B5744]" />
+                    <div>
+                      <p className="text-xs font-bold text-[#2F2923]">Upload GST certificate or ID card</p>
+                      <p className="text-[10px] text-[#766B60]">Photo or scan · helps us verify you faster</p>
+                    </div>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleIdCard} />
+                  </label>
+                )}
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className={label} htmlFor="si-id">Mobile number or email</label>
+              <input id="si-id" className={field} value={identifier} onChange={e => setIdentifier(e.target.value)} autoCapitalize="none" autoComplete="username" placeholder="Mobile or email" />
+            </div>
+          )}
+
+          <div>
+            <label className={label} htmlFor="pw">Password {isSignUp && '*'}</label>
+            <div className="relative">
+              <input
+                id="pw"
+                type={showPassword ? 'text' : 'password'}
+                className={`${field} pr-10`}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                placeholder={isSignUp ? 'At least 6 characters' : 'Your password'}
+              />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766B60] p-1" aria-label="Show password">
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+          {isSignUp && (
+            <div>
+              <label className={label} htmlFor="pw2">Confirm password *</label>
+              <input id="pw2" type={showPassword ? 'text' : 'password'} className={field} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
+            </div>
+          )}
+          {!isSignUp && (
+            <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={e => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded border-[#D2BFA7] cursor-pointer accent-[#6B5744]"
+              />
+              <span className="text-xs font-medium text-[#766B60]">Remember me</span>
+            </label>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full py-3.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+          >
+            {busy && <Loader2 size={16} className="animate-spin" />}
+            {isSignUp ? 'Submit for verification' : 'Sign In'}
+          </button>
+        </form>
+
+        <p className="text-xs text-center text-[#766B60] mt-5">
+          {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+          <button onClick={() => { setError(null); onSwitchMode(isSignUp ? 'signin' : 'signup'); }} className="font-bold text-[#6B5744]">
+            {isSignUp ? 'Sign in' : 'Create one'}
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-surface: #F5F0E8;
+  --color-primary: #6B5744;
+  --color-secondary: #B49A7A;
+  --color-border: #D2BFA7;
+  --color-text: #2F2923;
+  --color-muted: #766B60;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #F5F0E8;
+  color: #2F2923;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  touch-action: manipulation;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D2BFA7;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B49A7A;
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* Sticky action bars sit just above the customer bottom nav (64px + the same safe-area padding it uses) */
+.above-nav {
+  bottom: calc(4rem + env(safe-area-inset-bottom, 16px));
+}
+
+/* Two-thumb range slider: two range inputs stacked, only their thumbs take the pointer */
+.dual-range {
+  position: relative;
+  height: 28px;
+}
+.dual-range input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dual-range input[type='range']::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+.dual-range input[type='range']::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+.dual-range input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  margin-top: 3px;
+  border-radius: 9999px;
+  background: #6b5744;
+  border: 3px solid #fffcf7;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+/* Screenshot & print protection for customer portal (Requirement 9) */
+.screenshot-protected {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+@media print {
+  html, body, #root, * {
+    display: none !important;
+    visibility: hidden !important;
+    background: #000 !important;
+  }
+}
+

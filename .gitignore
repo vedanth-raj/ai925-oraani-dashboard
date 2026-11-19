@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Local Database & Live User Data (Preserve during updates & protect data!)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.db-journal
+data/jwt.key
+data/backups/
+data/cloud_drive/
+!data/.gitkeep
+
+# Uploaded Files & Private Cloud Documents
+uploads/*
+!uploads/.gitkeep
+
+# Large Binaries & Zip Archives
+cloudflared.exe
+*.zip
+
+# Environment Variables & Secrets
+.env
+.env.local
+
+# Build output
+client/dist/
+
+# OS / Editor / Agent files
+.DS_Store
+Thumbs.db
+*.log
+.gemini/
