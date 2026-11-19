@@ -75,10 +75,15 @@ echo [4/6] Setting up system libraries (first-time only)...
 call npm install --loglevel=error
 call npm --prefix client install --loglevel=error
 
-:: Download Cloudflare Tunnel binary for instant 4G/5G live links
-if not exist "%INSTALL_DIR%\cloudflared.exe" (
-    echo       Setting up zero-token 4G/5G tunnel engine...
-    curl.exe -L -s -o "%INSTALL_DIR%\cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+:: Create permanent Ngrok environment configuration
+if not exist "%INSTALL_DIR%\.env" (
+    (
+        echo # AI925 Order Management System - Environment Configuration
+        echo NGROK_AUTHTOKEN=3L6ahuT8juRgo9EGsKUkeBEdSpb_3oo2qqfmiacGwt6n2TMSN
+        echo NGROK_DOMAIN=vedanthdeviloper.ngrok-free.app
+        echo PORT=3000
+        echo NODE_ENV=production
+    ) > "%INSTALL_DIR%\.env"
 )
 
 echo       [OK] System libraries installed.

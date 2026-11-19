@@ -5,6 +5,19 @@ const fs = require('fs');
 
 // Load environment variables from .env if present
 const envPath = path.join(__dirname, '.env');
+const DEFAULT_NGROK_TOKEN = '3L6ahuT8juRgo9EGsKUkeBEdSpb_3oo2qqfmiacGwt6n2TMSN';
+const DEFAULT_NGROK_DOMAIN = 'vedanthdeviloper.ngrok-free.app';
+
+if (!fs.existsSync(envPath)) {
+  const defaultEnv = `# AI925 Order Management System - Environment Configuration
+NGROK_AUTHTOKEN=${DEFAULT_NGROK_TOKEN}
+NGROK_DOMAIN=${DEFAULT_NGROK_DOMAIN}
+PORT=3000
+NODE_ENV=production
+`;
+  try { fs.writeFileSync(envPath, defaultEnv); } catch {}
+}
+
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
   for (const line of envContent.split('\n')) {
@@ -20,6 +33,9 @@ if (fs.existsSync(envPath)) {
     }
   }
 }
+
+if (!process.env.NGROK_AUTHTOKEN) process.env.NGROK_AUTHTOKEN = DEFAULT_NGROK_TOKEN;
+if (!process.env.NGROK_DOMAIN) process.env.NGROK_DOMAIN = DEFAULT_NGROK_DOMAIN;
 
 let qrcode = null;
 try {
@@ -74,37 +90,21 @@ function getLocalIpAddresses() {
   return valid;
 }
 
-function ensureCloudflaredBinary() {
-  const cfExe = path.join(__dirname, 'cloudflared.exe');
-  if (fs.existsSync(cfExe)) return cfExe;
-
-  // On Windows, try downloading cloudflared if curl is available
-  if (process.platform === 'win32') {
-    try {
-      console.log('  Downloading Cloudflare Mobile Tunnel binary...');
-      require('child_process').execSync(
-        'curl.exe -L -s -o "' + cfExe + '" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"',
-        { timeout: 45000, stdio: 'ignore' }
-      );
-      if (fs.existsSync(cfExe)) return cfExe;
-    } catch {}
-  }
-  return null;
-}
-
-// Function to establish secure public internet tunnel (Prioritizes Ngrok Port 443, with Cloudflare fallback)
+// Function to establish permanent 4G/5G Ngrok tunnel (Port 443 HTTPS)
 async function startInternetTunnel(port) {
-  // 1. Check if Ngrok is configured (Uses standard Port 443 HTTPS, supports permanent static domain)
-  if (process.env.NGROK_AUTHTOKEN) {
+  const token = process.env.NGROK_AUTHTOKEN || DEFAULT_NGROK_TOKEN;
+  const domain = process.env.NGROK_DOMAIN || DEFAULT_NGROK_DOMAIN;
+
+  if (token) {
     try {
       const ngrok = require('@ngrok/ngrok');
-      console.log('  Starting secure Ngrok 4G/5G tunnel (Port 443 HTTPS)...');
+      console.log(`  Starting permanent Ngrok 4G/5G tunnel (${domain || 'Port 443 HTTPS'})...`);
       const forwardOptions = {
         addr: port,
-        authtoken: process.env.NGROK_AUTHTOKEN
+        authtoken: token
       };
-      if (process.env.NGROK_DOMAIN) {
-        forwardOptions.domain = process.env.NGROK_DOMAIN;
+      if (domain) {
+        forwardOptions.domain = domain;
       }
       const listener = await ngrok.forward(forwardOptions);
       const url = listener.url();
@@ -112,94 +112,12 @@ async function startInternetTunnel(port) {
         url,
         proc: { kill: () => { try { ngrok.disconnect(); } catch {} } },
         provider: 'Ngrok',
-        isStatic: Boolean(process.env.NGROK_DOMAIN)
+        isStatic: Boolean(domain)
       };
     } catch (ngrokErr) {
       console.log(`  Ngrok notice: ${ngrokErr.message}`);
     }
   }
-
-  // 2. Cloudflare Quick Tunnel Fallback
-  const cfExe = ensureCloudflaredBinary();
-  if (cfExe) {
-    console.log('  Establishing automatic Cloudflare mobile tunnel (No token required)...');
-    const cfResult = await new Promise((resolve) => {
-      try {
-        const proc = spawn(cfExe, [
-          'tunnel',
-          '--url', `http://127.0.0.1:${port}`
-        ]);
-
-        let resolved = false;
-        let candidateUrl = null;
-
-        const finish = (result) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timer);
-            resolve(result);
-          }
-        };
-
-        const handleData = (chunk) => {
-          const text = chunk.toString();
-
-          const match = text.match(/https:\/\/[a-z0-9\-]+\.trycloudflare\.com/i);
-          if (match && !candidateUrl) {
-            candidateUrl = match[0];
-            setTimeout(() => {
-              finish({ url: candidateUrl, proc, provider: 'Cloudflare', isStatic: false });
-            }, 1200);
-          }
-
-          if (/hard_fail=true|HTTP\/2 connection is blocked|QUIC connection failed|Unable to establish connection with Cloudflare edge|DialContext error/i.test(text)) {
-            try { proc.kill(); } catch {}
-            finish({ url: null, proc: null, reason: 'port_7844_blocked' });
-          }
-        };
-
-        proc.stdout.on('data', handleData);
-        proc.stderr.on('data', handleData);
-
-        proc.on('error', () => {
-          finish({ url: null, proc: null, reason: 'process_error' });
-        });
-
-        proc.on('exit', () => {
-          finish({ url: null, proc: null, reason: 'process_exit' });
-        });
-
-        const timer = setTimeout(() => {
-          if (!resolved) {
-            try { proc.kill(); } catch {}
-            finish({ url: null, proc: null, reason: 'timeout' });
-          }
-        }, 20000);
-
-      } catch (err) {
-        resolve({ url: null, proc: null, reason: 'spawn_error' });
-      }
-    });
-
-    if (cfResult && cfResult.url) {
-      return cfResult;
-    }
-  }
-
-  // 3. Fallback: Localtunnel (Zero configuration required)
-  try {
-    const localtunnel = require('localtunnel');
-    console.log('  Connecting fallback public tunnel via Localtunnel (No token required)...');
-    const tunnel = await localtunnel({ port });
-    if (tunnel && tunnel.url) {
-      return {
-        url: tunnel.url,
-        proc: { kill: () => { try { tunnel.close(); } catch {} } },
-        provider: 'Localtunnel',
-        isStatic: false
-      };
-    }
-  } catch {}
 
   return { url: null, proc: null, provider: null, isStatic: false };
 }

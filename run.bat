@@ -108,11 +108,16 @@ if errorlevel 1 (
 echo [OK] Web app is up to date
 
 :: ---------------------------------------------------------------
-:: 4. Cloudflare mobile tunnel binary
+:: 4. Ensure .env with permanent Ngrok static domain configuration
 :: ---------------------------------------------------------------
-if not exist "cloudflared.exe" (
-    echo [INFO] Downloading Cloudflare mobile tunnel binary...
-    curl.exe -L -s -o "cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+if not exist ".env" (
+    (
+        echo # AI925 Order Management System - Environment Configuration
+        echo NGROK_AUTHTOKEN=3L6ahuT8juRgo9EGsKUkeBEdSpb_3oo2qqfmiacGwt6n2TMSN
+        echo NGROK_DOMAIN=vedanthdeviloper.ngrok-free.app
+        echo PORT=3000
+        echo NODE_ENV=production
+    ) > ".env"
 )
 
 echo.
