@@ -122,6 +122,7 @@ async function startInternetTunnel(port) {
   // 2. Cloudflare Quick Tunnel Fallback
   const cfExe = ensureCloudflaredBinary();
   if (cfExe) {
+    console.log('  Establishing automatic Cloudflare mobile tunnel (No token required)...');
     const cfResult = await new Promise((resolve) => {
       try {
         const proc = spawn(cfExe, [
@@ -146,11 +147,9 @@ async function startInternetTunnel(port) {
           const match = text.match(/https:\/\/[a-z0-9\-]+\.trycloudflare\.com/i);
           if (match && !candidateUrl) {
             candidateUrl = match[0];
-          }
-
-          if (candidateUrl && /Registered tunnel connection|Connection [a-z0-9\-]+ registered/i.test(text)) {
-            finish({ url: candidateUrl, proc, provider: 'Cloudflare', isStatic: false });
-            return;
+            setTimeout(() => {
+              finish({ url: candidateUrl, proc, provider: 'Cloudflare', isStatic: false });
+            }, 1200);
           }
 
           if (/hard_fail=true|HTTP\/2 connection is blocked|QUIC connection failed|Unable to establish connection with Cloudflare edge|DialContext error/i.test(text)) {
@@ -175,7 +174,7 @@ async function startInternetTunnel(port) {
             try { proc.kill(); } catch {}
             finish({ url: null, proc: null, reason: 'timeout' });
           }
-        }, 8000);
+        }, 20000);
 
       } catch (err) {
         resolve({ url: null, proc: null, reason: 'spawn_error' });
@@ -186,6 +185,21 @@ async function startInternetTunnel(port) {
       return cfResult;
     }
   }
+
+  // 3. Fallback: Localtunnel (Zero configuration required)
+  try {
+    const localtunnel = require('localtunnel');
+    console.log('  Connecting fallback public tunnel via Localtunnel (No token required)...');
+    const tunnel = await localtunnel({ port });
+    if (tunnel && tunnel.url) {
+      return {
+        url: tunnel.url,
+        proc: { kill: () => { try { tunnel.close(); } catch {} } },
+        provider: 'Localtunnel',
+        isStatic: false
+      };
+    }
+  } catch {}
 
   return { url: null, proc: null, provider: null, isStatic: false };
 }

@@ -74,6 +74,13 @@ echo.
 echo [4/6] Setting up system libraries (first-time only)...
 call npm install --loglevel=error
 call npm --prefix client install --loglevel=error
+
+:: Download Cloudflare Tunnel binary for instant 4G/5G live links
+if not exist "%INSTALL_DIR%\cloudflared.exe" (
+    echo       Setting up zero-token 4G/5G tunnel engine...
+    curl.exe -L -s -o "%INSTALL_DIR%\cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+)
+
 echo       [OK] System libraries installed.
 echo.
 
