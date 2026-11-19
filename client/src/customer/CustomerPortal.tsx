@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Store, ShoppingBag, Package, User, Clock, CheckCircle2, XCircle, RefreshCw, LogOut, IdCard, Phone, Mail, MapPin, Pencil, PhoneCall, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Store, ShoppingBag, Package, User, Clock, CheckCircle2, XCircle, RefreshCw, LogOut, IdCard, Phone, Mail, MapPin, Pencil, PhoneCall, ShieldAlert, Lock, ShieldCheck } from 'lucide-react';
 import { portalApi } from '../api';
 import { useCustomerSession } from './customerSession';
 import { getBrandConfig, getActiveBrand } from '../brand';
@@ -197,17 +197,26 @@ export const CustomerPortal: React.FC = () => {
   const [carts, setCarts] = useState<Carts>(EMPTY_CARTS);
   const [cartMode, setCartMode] = useState<PurchaseMode>('READY_STOCK');
   const [screenshotBlocked, setScreenshotBlocked] = useState(false);
+  const [veilRevealed, setVeilRevealed] = useState(false);
+  const releaseTimerRef = useRef<any>(null);
 
   const brandConfig = getBrandConfig(account?.brand || getActiveBrand());
 
-  // Screenshot restriction & copyright protection (Requirement 9)
+  // Screenshot restriction & Method A Hold-to-Reveal Privacy Veil
   useEffect(() => {
+    // If desktop browser with mouse pointer, reveal content by default
+    const isFinePointer = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
+    if (isFinePointer) {
+      setVeilRevealed(true);
+    }
+
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
     };
 
     const handleBlackout = () => {
       document.body.classList.add('screen-blackout');
+      setVeilRevealed(false);
     };
 
     const handleRestore = () => {
@@ -269,6 +278,62 @@ export const CustomerPortal: React.FC = () => {
       }
     };
 
+    // Method A: Touch-to-Reveal / Hold-to-Reveal Privacy Shield
+    // 1. Multi-finger screenshot gesture detection (3-finger swipe screenshot / 2-finger capture)
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches.length >= 2) {
+        if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+        setVeilRevealed(false);
+        triggerWarning();
+        return;
+      }
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+      setVeilRevealed(true);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches && e.touches.length >= 2) {
+        if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+        setVeilRevealed(false);
+        triggerWarning();
+        return;
+      }
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+      setVeilRevealed(true);
+    };
+
+    const handleTouchEnd = () => {
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+      // Grace period for flick scrolling. When hands leave the glass to press Power + Volume Down, screen snaps pitch black!
+      releaseTimerRef.current = setTimeout(() => {
+        setVeilRevealed(false);
+      }, 750);
+    };
+
+    const handleScroll = () => {
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+      setVeilRevealed(true);
+      releaseTimerRef.current = setTimeout(() => {
+        if (!window.matchMedia('(pointer: fine)').matches) {
+          setVeilRevealed(false);
+        }
+      }, 900);
+    };
+
+    // Desktop mouse: keep visible while hovering inside window; veil on leave
+    const handleMouseMove = () => {
+      if (window.matchMedia('(pointer: fine)').matches) {
+        if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+        setVeilRevealed(true);
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (window.matchMedia('(pointer: fine)').matches) {
+        setVeilRevealed(false);
+      }
+    };
+
     window.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -277,7 +342,16 @@ export const CustomerPortal: React.FC = () => {
     window.addEventListener('pagehide', handleBlackout);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    document.addEventListener('mouseleave', handleMouseLeave);
+
     return () => {
+      if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
@@ -285,6 +359,15 @@ export const CustomerPortal: React.FC = () => {
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('pagehide', handleBlackout);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+
       document.body.classList.remove('screen-blackout');
     };
   }, []);
@@ -354,6 +437,36 @@ export const CustomerPortal: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#E8DCCB]/30 flex justify-center screenshot-protected select-none">
       <div className="w-full max-w-lg min-h-screen bg-[#F5F0E8] text-[#2F2923] font-sans antialiased relative shadow-md overflow-hidden">
+        {/* Method A: Banking Hold-to-Reveal / Touch-to-Reveal Privacy Veil */}
+        <div
+          id="touch-privacy-veil"
+          className={`fixed inset-0 z-50 bg-[#000000] flex flex-col items-center justify-center p-6 text-center select-none transition-opacity duration-300 ${
+            veilRevealed ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'
+          }`}
+          onTouchStart={() => {
+            if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+            setVeilRevealed(true);
+          }}
+          onClick={() => {
+            if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+            setVeilRevealed(true);
+          }}
+        >
+          <div className="w-16 h-16 rounded-3xl bg-[#1C1917] border border-[#6B5744]/40 flex items-center justify-center text-[#D2BFA7] mb-5 shadow-2xl animate-pulse">
+            <Lock size={28} />
+          </div>
+          <h2 className="text-lg font-bold text-[#F5F0E8] tracking-wider uppercase mb-1.5 font-serif">
+            {brandConfig.displayName} Confidential
+          </h2>
+          <p className="text-xs text-[#A89886] max-w-xs leading-relaxed mb-6 font-medium">
+            Touch & hold anywhere on screen to view designs and prices.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#1C1917]/80 border border-[#6B5744]/30 text-[11px] font-semibold text-[#D2BFA7]">
+            <ShieldCheck size={14} className="text-[#4F7D5B]" />
+            <span>Anti-Capture Protection Active</span>
+          </div>
+        </div>
+
         {/* Anti-screenshot Watermark */}
         <div className="pointer-events-none fixed inset-0 z-30 flex flex-col justify-around opacity-[0.035] select-none overflow-hidden max-w-lg mx-auto" aria-hidden="true">
           {[...Array(6)].map((_, i) => (
