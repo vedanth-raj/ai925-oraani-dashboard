@@ -20,6 +20,7 @@ interface WeightRow {
   slabs: WeightSlabDraft[];
   sku_code: string;
   wire_size: string;
+  thickness: string;
   endings: string;
   lock_type: string;
   extra: Record<string, string>;
@@ -56,7 +57,7 @@ function legacySlabs(making: number | null | undefined, tiers: PriceTier[]): Wei
 }
 
 const MAX_IMAGES = 10;
-const emptyWeight = (): WeightRow => ({ std_weight_g: '', slabs: defaultSlabs(), sku_code: '', wire_size: '', endings: '', lock_type: 'Fish Lock', extra: {} });
+const emptyWeight = (): WeightRow => ({ std_weight_g: '', slabs: defaultSlabs(), sku_code: '', wire_size: '', thickness: '', endings: '', lock_type: 'Fish Lock', extra: {} });
 const filled = (v: string) => v.trim() !== '';
 const slabsPayload = (rows: WeightSlabDraft[]) =>
   sortSlabDrafts(rows).map(s => ({ min_g: parseFloat(s.min_g), max_g: filled(s.max_g) ? parseFloat(s.max_g) : null, making: parseFloat(s.making), order_type: s.order_type }));
@@ -169,6 +170,7 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
                   slabs: o.weight_slabs && o.weight_slabs.length > 0 ? o.weight_slabs.map(toDraft) : legacySlabs(o.making_charge, res.tiers || []),
                   sku_code: o.sku_code || '',
                   wire_size: o.wire_size || '',
+                  thickness: o.thickness || p.thickness || '',
                   endings: o.endings || '',
                   lock_type: o.lock_type || '',
                   extra: { ...(o.extra || {}) }
@@ -301,6 +303,7 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
       weight_slabs: slabDraftError(r.slabs) ? [] : slabsPayload(r.slabs),
       sku_code: r.sku_code,
       wire_size: r.wire_size,
+      thickness: r.thickness,
       endings: r.endings,
       lock_type: r.lock_type,
       extra: r.extra
@@ -374,6 +377,7 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
           weight_slabs: slabsPayload(r.slabs),
           sku_code: r.sku_code,
           wire_size: r.wire_size,
+          thickness: r.thickness,
           endings: r.endings,
           lock_type: r.lock_type,
           extra: r.extra
@@ -640,6 +644,15 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
                     <label className={miniLabel}>Wire Size</label>
                     <OptionSelect value={r.wire_size} options={optionLists.wire_size} className={fieldCls} ariaLabel="wire size"
                       onChange={v => setWeight(i, 'wire_size', v)} onCreate={v => addOption('wire_size', v)} />
+                  </div>
+                  <div>
+                    <label className={miniLabel}>Thickness</label>
+                    <input
+                      value={r.thickness || ''}
+                      placeholder="e.g. 1.8 mm"
+                      className={fieldCls}
+                      onChange={e => setWeight(i, 'thickness', e.target.value)}
+                    />
                   </div>
                   <div>
                     <label className={miniLabel}>Endings</label>

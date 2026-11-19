@@ -544,13 +544,45 @@ function initializeSchema() {
       db.prepare("ALTER TABLE audit_logs ADD COLUMN new_data TEXT").run();
     }
 
-    // 4. Product pricing columns (labour charge per gram, minimum order quantity)
+    // 4. Product pricing columns (labour charge per gram, minimum order quantity, thickness)
     const productColumns = db.prepare("PRAGMA table_info(products)").all().map(c => c.name);
     if (!productColumns.includes('labour_per_gram')) {
       db.prepare("ALTER TABLE products ADD COLUMN labour_per_gram REAL DEFAULT 0").run();
     }
     if (!productColumns.includes('moq')) {
       db.prepare("ALTER TABLE products ADD COLUMN moq INTEGER DEFAULT 1").run();
+    }
+    if (!productColumns.includes('thickness')) {
+      db.prepare("ALTER TABLE products ADD COLUMN thickness TEXT").run();
+      db.prepare(`
+        UPDATE products 
+        SET thickness = CASE
+          WHEN wire_size = '18' THEN '2.4 mm'
+          WHEN wire_size = '20' THEN '2.0 mm'
+          WHEN wire_size = '22' THEN '1.8 mm'
+          WHEN wire_size = '24' THEN '1.5 mm'
+          WHEN wire_size = '42' THEN '1.4 mm'
+          WHEN wire_size IS NOT NULL AND length(wire_size) > 0 THEN wire_size || ' mm'
+          ELSE '2.0 mm'
+        END
+      `).run();
+    }
+
+    const weightOptCols = db.prepare("PRAGMA table_info(product_weight_options)").all().map(c => c.name);
+    if (!weightOptCols.includes('thickness')) {
+      db.prepare("ALTER TABLE product_weight_options ADD COLUMN thickness TEXT").run();
+      db.prepare(`
+        UPDATE product_weight_options 
+        SET thickness = CASE
+          WHEN wire_size = '18' THEN '2.4 mm'
+          WHEN wire_size = '20' THEN '2.0 mm'
+          WHEN wire_size = '22' THEN '1.8 mm'
+          WHEN wire_size = '24' THEN '1.5 mm'
+          WHEN wire_size = '42' THEN '1.4 mm'
+          WHEN wire_size IS NOT NULL AND length(wire_size) > 0 THEN wire_size || ' mm'
+          ELSE '2.0 mm'
+        END
+      `).run();
     }
 
     // 5. Order pricing, portal source and payment columns
@@ -713,7 +745,7 @@ function initializeSchema() {
       db.prepare("ALTER TABLE orders ADD COLUMN brand TEXT DEFAULT 'AI925'").run();
     }
 
-    // 19. State-wise premium pricing rules
+    // 19. State-wise premium pricing rules, custom delivery pincodes, and weight slab discounts
     db.exec(`
       CREATE TABLE IF NOT EXISTS state_premiums (
         id TEXT PRIMARY KEY,
@@ -724,7 +756,38 @@ function initializeSchema() {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_state_premiums_state ON state_premiums(state);
+
+      CREATE TABLE IF NOT EXISTS delivery_pincodes (
+        pincode TEXT PRIMARY KEY,
+        charge REAL NOT NULL DEFAULT 0,
+        city TEXT,
+        state TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_delivery_pincodes_state ON delivery_pincodes(state);
+
+      CREATE TABLE IF NOT EXISTS weight_slab_discounts (
+        id TEXT PRIMARY KEY,
+        min_kg REAL NOT NULL,
+        max_kg REAL,
+        discount_per_gram REAL NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
+
+    // Seed default weight slab discounts if table is empty
+    const existingSlabs = db.prepare('SELECT COUNT(*) as count FROM weight_slab_discounts').get();
+    if (existingSlabs && existingSlabs.count === 0) {
+      const now = new Date().toISOString();
+      const insertSlab = db.prepare(`
+        INSERT INTO weight_slab_discounts (id, min_kg, max_kg, discount_per_gram, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+      `);
+      insertSlab.run('slab_1_2kg', 1.0, 2.0, 2.0, now, now);
+      insertSlab.run('slab_2kg_plus', 2.0, null, 4.0, now, now);
+    }
 
     // 9. One-time: give every existing product a standard weight option built from its own fields
     const seeded = db.prepare("SELECT value FROM app_settings WHERE key = 'weight_options_seeded'").get();

@@ -257,15 +257,49 @@ function makingFor({ product, tiers, weightOptions, stdWeight, mode, pieces, gra
   return { labour_per_gram: tierLabour, mrp_per_gram: base, tier, weight_slab: null };
 }
 
+// Weight-based labour charge discount lookup (e.g., 1-2kg -> Rs.2/g off labour, 2kg+ -> Rs.4/g off)
+function getWeightSlabDiscount(totalGrams) {
+  if (!(totalGrams > 0)) return { discount_per_gram: 0, slab: null };
+  const totalKg = totalGrams / 1000;
+  try {
+    const slabs = db.prepare(`
+      SELECT * FROM weight_slab_discounts
+      WHERE is_active = 1
+      ORDER BY min_kg DESC
+    `).all();
+    for (const slab of slabs) {
+      const min = parseFloat(slab.min_kg);
+      const max = slab.max_kg === null || slab.max_kg === undefined || slab.max_kg === '' ? null : parseFloat(slab.max_kg);
+      if (totalKg >= min && (max === null || totalKg < max)) {
+        return {
+          discount_per_gram: parseFloat(slab.discount_per_gram) || 0,
+          slab: { ...slab, min_kg: min, max_kg: max }
+        };
+      }
+    }
+  } catch {}
+  return { discount_per_gram: 0, slab: null };
+}
+
+function getAllWeightSlabDiscounts() {
+  try {
+    return db.prepare('SELECT * FROM weight_slab_discounts ORDER BY min_kg ASC').all();
+  } catch {
+    return [];
+  }
+}
+
 // Smallest net silver weight a customer order can be placed for, per purchase type
 const MIN_ORDER_GRAMS = { READY_STOCK: 100, ON_ORDER: 500 };
 
-// Silver per gram + labour per gram, then 3% GST on the whole.
-function priceBreakdown(weightG, silverRate, labourPerGram, statePremiumPct = 0) {
+// Silver per gram + labour per gram (with state extra cost % and weight slab discount in Rs/g), then 3% GST.
+function priceBreakdown(weightG, silverRate, labourPerGram, statePremiumPct = 0, slabDiscountPerGram = 0) {
   const multiplier = 1 + (Number(statePremiumPct) || 0) / 100;
-  const effectiveSilverRate = round2((Number(silverRate) || 0) * multiplier);
-  const effectiveLabour = round2((Number(labourPerGram) || 0));
-  const silver = round2(effectiveSilverRate * weightG);
+  const baseLabour = Number(labourPerGram) || 0;
+  // State extra cost applies to labour charges, followed by slab discount in Rs/g
+  const scaledLabour = round2(baseLabour * multiplier);
+  const effectiveLabour = Math.max(0, round2(scaledLabour - (Number(slabDiscountPerGram) || 0)));
+  const silver = round2((Number(silverRate) || 0) * weightG);
   const labour = round2(effectiveLabour * weightG);
   const subtotal = round2(silver + labour);
   const gst = round2(subtotal * GST_RATE);
@@ -275,7 +309,9 @@ function priceBreakdown(weightG, silverRate, labourPerGram, statePremiumPct = 0)
     labour_amount: labour,
     subtotal,
     gst_amount: gst,
-    total: round2(subtotal + gst)
+    total: round2(subtotal + gst),
+    state_premium_pct: Number(statePremiumPct) || 0,
+    slab_discount_per_gram: Number(slabDiscountPerGram) || 0
   };
 }
 
@@ -330,5 +366,7 @@ module.exports = {
   priceBreakdown,
   productPricing,
   getStatePremium,
-  getAllStatePremiums
+  getAllStatePremiums,
+  getWeightSlabDiscount,
+  getAllWeightSlabDiscounts
 };

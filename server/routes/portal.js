@@ -13,7 +13,7 @@ const {
   clearLoginAttempts
 } = require('../middleware/auth');
 const { uploadsSubdir, storeUploadedFile, removeUpload, imageFileFilter } = require('../utils/files');
-const { round2, getCurrentSilverRate, getVariants, getTiers, getWeightOptions, productPricing, MIN_ORDER_GRAMS, productImages, getStatePremium } = require('../utils/pricing');
+const { round2, getCurrentSilverRate, getVariants, getTiers, getWeightOptions, productPricing, MIN_ORDER_GRAMS, productImages, getStatePremium, getAllWeightSlabDiscounts, getWeightSlabDiscount } = require('../utils/pricing');
 const { buildPricedItems, sumPricing, insertOrder } = require('../services/orders');
 const { PAYMENT_METHODS, paymentOptions, payWithPlan } = require('../services/payments');
 const { customerPin, deliveryChargeFor, getPaymentTerms } = require('../services/commerce');
@@ -201,13 +201,21 @@ function readySizes(product, variants) {
 
 // What a customer sees of a standard weight option (wire size and endings stay internal)
 function publicWeightOption(o) {
-  return { std_weight_g: o.std_weight_g, making_charge: o.making_charge, weight_slabs: o.weight_slabs || [], sku_code: o.sku_code, lock_type: o.lock_type };
+  return {
+    std_weight_g: o.std_weight_g,
+    making_charge: o.making_charge,
+    weight_slabs: o.weight_slabs || [],
+    sku_code: o.sku_code,
+    lock_type: o.lock_type,
+    thickness: o.thickness || (o.wire_size ? (o.wire_size.includes('mm') ? o.wire_size : o.wire_size + ' mm') : null)
+  };
 }
 
 function catalogProduct(p, rate) {
   const variants = getVariants(p.id);
   const tiers = getTiers(p.id);
   const sizes = readySizes(p, variants);
+  const defaultThk = p.thickness || (p.wire_size ? (p.wire_size.includes('mm') ? p.wire_size : p.wire_size + ' mm') : '2.0 mm');
   return {
     id: p.id,
     name: p.name,
@@ -215,6 +223,7 @@ function catalogProduct(p, rate) {
     category_name: p.category_name,
     description: p.description,
     lock_type: p.lock_type,
+    thickness: defaultThk,
     image_path: p.image_path,
     image_paths: productImages(p),
     std_weight_per_20in: p.std_weight_per_20in,
@@ -256,7 +265,8 @@ router.get('/products', authenticateCustomer, requireApprovedCustomer, (req, res
   }
 
   const categories = db.prepare('SELECT name FROM categories WHERE is_archived = 0 ORDER BY created_at ASC').all().map(c => c.name);
-  res.json({ products, categories, silver_rate: rate });
+  const discounts = getAllWeightSlabDiscounts().filter(d => Boolean(d.is_active));
+  res.json({ products, categories, silver_rate: rate, weight_slab_discounts: discounts });
 });
 
 // GET /api/portal/products/:id
@@ -277,7 +287,8 @@ router.get('/products/:id', authenticateCustomer, requireApprovedCustomer, (req,
     return res.status(404).json({ error: 'Product not found' });
   }
   const rate = getCurrentSilverRate();
-  res.json({ product: catalogProduct(p, rate.rate_per_gram), silver_rate: rate });
+  const discounts = getAllWeightSlabDiscounts().filter(d => Boolean(d.is_active));
+  res.json({ product: catalogProduct(p, rate.rate_per_gram), silver_rate: rate, weight_slab_discounts: discounts });
 });
 
 // POST /api/portal/stock-requests ("Request from seller" for an unavailable size)

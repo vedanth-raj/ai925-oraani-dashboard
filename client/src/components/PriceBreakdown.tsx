@@ -108,9 +108,21 @@ export const PriceBreakdown: React.FC<PriceBreakdownProps> = ({ breakdown, silve
           <span className="font-semibold text-[#2F2923]">{formatINR(breakdown.silver_amount)}</span>
         </div>
         <div className="flex items-center justify-between py-2">
-          <span className="text-[#766B60]">
-            Making charges {labourPerGram !== null ? `(${formatINR(labourPerGram)}/g)` : '(per product)'}
-          </span>
+          <div>
+            <span className="text-[#766B60]">
+              Making charges {labourPerGram !== null ? `(${formatINR(labourPerGram)}/g)` : '(per product)'}
+            </span>
+            {breakdown.slab_discount_per_gram && breakdown.slab_discount_per_gram > 0 ? (
+              <span className="block text-[10px] text-[#4F7D5B] font-semibold">
+                Includes −{formatINR(breakdown.slab_discount_per_gram)}/g weight slab discount
+              </span>
+            ) : null}
+            {breakdown.state_premium_pct && breakdown.state_premium_pct > 0 ? (
+              <span className="block text-[10px] text-[#6B5744]">
+                +{breakdown.state_premium_pct}% state labour markup applied
+              </span>
+            ) : null}
+          </div>
           <span className="font-semibold text-[#2F2923]">{formatINR(breakdown.labour_amount)}</span>
         </div>
         <div className="flex items-center justify-between py-2">

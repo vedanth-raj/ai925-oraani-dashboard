@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Minus, Plus, Trash2, ShoppingBag, AlertTriangle, Loader2 } from 'lucide-react';
-import { portalApi, type CatalogProduct, type DeliveryQuote, type PaymentOptions, type SilverRate } from '../api';
+import { portalApi, type CatalogProduct, type DeliveryQuote, type PaymentOptions, type SilverRate, type WeightSlabDiscount } from '../api';
 import { PriceBreakdown } from '../components/PriceBreakdown';
 import { DummyPaymentModal } from '../components/DummyPaymentModal';
 import { formatINR, round2, MIN_ORDER_GRAMS } from '../pricing';
 import { type Carts, type CartLine, type PurchaseMode, MODE_LABEL, priceCart } from './cart';
+import { useCustomerSession } from './customerSession';
 
 interface CartScreenProps {
   carts: Carts;
@@ -15,8 +16,11 @@ interface CartScreenProps {
 }
 
 export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onChange, onShop, onOrderPlaced }) => {
+  const { account } = useCustomerSession();
+  const statePremiumPct = account?.state_premium_pct || 0;
   const [mode, setMode] = useState<PurchaseMode>(carts[initialMode].length > 0 || carts.ON_ORDER.length === 0 ? initialMode : 'ON_ORDER');
   const [products, setProducts] = useState<Record<string, CatalogProduct>>({});
+  const [slabDiscounts, setSlabDiscounts] = useState<WeightSlabDiscount[]>([]);
   const [rate, setRate] = useState<SilverRate | null>(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState('');
@@ -33,6 +37,9 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
         res.products.forEach(p => { map[p.id] = p; });
         setProducts(map);
         setRate(res.silver_rate);
+        if (res.weight_slab_discounts) {
+          setSlabDiscounts(res.weight_slab_discounts);
+        }
       })
       .catch(err => setError(err.message || 'Failed to load prices'))
       .finally(() => setLoading(false));
@@ -43,7 +50,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
 
   const lines = carts[mode];
   const silverRate = rate?.rate_per_gram ?? 0;
-  const priced = useMemo(() => priceCart(lines, products, silverRate, mode), [lines, products, silverRate, mode]);
+  const priced = useMemo(() => priceCart(lines, products, silverRate, mode, statePremiumPct, slabDiscounts), [lines, products, silverRate, mode, statePremiumPct, slabDiscounts]);
   const goodsTotal = priced.total.total;
 
   // Delivery charge for the customer's PIN code at this order value (the server charges the same at checkout)
@@ -153,6 +160,24 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
           <button onClick={() => onShop(mode)} className="w-full py-2.5 bg-[#E8DCCB]/50 border border-[#D2BFA7] rounded-xl text-xs font-bold text-[#2F2923]">
             + Add more from {MODE_LABEL[mode]}
           </button>
+
+          {priced.matchedSlab && priced.activeSlabDiscount > 0 && (
+            <div className="bg-[#E3EEE6] border border-[#4F7D5B]/30 rounded-xl p-3 text-xs text-[#2A5235] flex items-center justify-between">
+              <div>
+                <span className="font-bold">Weight Slab Discount:</span> {priced.matchedSlab.min_kg}{priced.matchedSlab.max_kg ? ` - ${priced.matchedSlab.max_kg}` : '+'} kg slab
+                <p className="text-[10px] text-[#4F7D5B] mt-0.5">Applied to labour charges across your entire order</p>
+              </div>
+              <span className="font-bold text-sm bg-white/90 text-[#2A5235] px-2.5 py-1 rounded-lg border border-[#4F7D5B]/30 shadow-xs">
+                −₹{priced.activeSlabDiscount}/g
+              </span>
+            </div>
+          )}
+
+          {statePremiumPct > 0 && (
+            <div className="bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl p-2.5 text-xs text-[#6B5744] flex items-center justify-between">
+              <span>State extra cost ({statePremiumPct}%) for <strong>{account?.state || 'your region'}</strong> applied to making charges.</span>
+            </div>
+          )}
 
           <PriceBreakdown
             title="Bill Summary"

@@ -9,6 +9,7 @@ data/*.db-wal
 data/*.db-shm
 data/*.db-journal
 data/*.key
+data/version.json
 data/backups/
 data/cloud_drive/
 !data/.gitkeep

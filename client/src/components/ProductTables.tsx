@@ -86,6 +86,7 @@ export interface WeightRowView {
   weight_slabs?: WeightSlab[];
   sku_code?: string | null;
   wire_size?: string | null;
+  thickness?: string | null;
   endings?: string | null;
   lock_type?: string | null;
   extra?: Record<string, string>;
@@ -109,6 +110,7 @@ export const WeightOptionsTable: React.FC<{
         <thead>
           <tr>
             <th className={th}>Standard Wt.</th>
+            <th className={th}>Thickness</th>
             <th className={th}>Pricing</th>
             {pricePerPiece && <th className={th}>₹ / pc</th>}
             <th className={th}>SKU Code</th>
@@ -129,6 +131,7 @@ export const WeightOptionsTable: React.FC<{
                 className={`border-t border-[#E8DCCB] ${onSelect ? 'cursor-pointer hover:bg-[#F5F0E8]' : ''} ${active ? 'bg-[#E8DCCB]' : ''}`}
               >
                 <td className={`${td} font-bold`}>{grams(r.std_weight_g)}</td>
+                <td className={`${td} font-semibold text-[#6B5744]`}>{r.thickness || (r.wire_size ? (r.wire_size.includes('mm') ? r.wire_size : r.wire_size + ' mm') : '—')}</td>
                 <td className={td}>
                   {r.weight_slabs && r.weight_slabs.length > 1
                     ? r.weight_slabs.map((sl, k) => (

@@ -73,6 +73,12 @@ function deliveryChargeFor({ pin, zone, orderValue }) {
     return { charge: 0, basis: `Free above ₹${rates.free_above}`, pin };
   }
   if (pin) {
+    try {
+      const custom = db.prepare('SELECT charge, city, state FROM delivery_pincodes WHERE pincode = ?').get(String(pin).trim());
+      if (custom) {
+        return { charge: parseFloat(custom.charge) || 0, basis: `Pincode ${pin} charge`, pin };
+      }
+    } catch {}
     const rule = rates.rules
       .filter(r => pin.startsWith(r.prefix))
       .sort((a, b) => b.prefix.length - a.prefix.length)[0];

@@ -82,12 +82,12 @@ export const StatePremiumCard: React.FC = () => {
       <div className="flex items-center gap-2 mb-2">
         <TrendingUp size={16} className="text-[#6B5744]" />
         <h2 className="text-xs font-bold text-[#2F2923] uppercase tracking-wider">
-          State-Wise Premium Pricing
+          State Extra Costs on Labour Charges
         </h2>
       </div>
 
       <p className="text-[11px] text-[#766B60] mb-4 leading-relaxed">
-        Configure percentage markup for specific states. Customers belonging to these states will see prices scaled by this multiplier across all products and pricing slabs.
+        Set prior extra costs according to states in percent of labour charges. For example: if <strong>Goa is set to +20%</strong>, customers of Goa viewing products will see 20% extra applied to the labour charges.
       </p>
 
       {notice && (
@@ -126,7 +126,7 @@ export const StatePremiumCard: React.FC = () => {
 
           <div>
             <label className="block text-[10px] font-bold text-[#766B60] uppercase mb-1">
-              Premium Markup (%)
+              Extra Labour Cost (%)
             </label>
             <div className="relative">
               <input
@@ -135,7 +135,7 @@ export const StatePremiumCard: React.FC = () => {
                 step="0.5"
                 value={premiumPct}
                 onChange={(e) => setPremiumPct(e.target.value)}
-                placeholder="e.g. 100 for 2X"
+                placeholder="e.g. 20 for +20%"
                 className="w-full bg-[#FFFCF7] border border-[#D2BFA7] rounded-lg pl-2.5 pr-7 py-1.5 text-xs font-bold text-[#2F2923] focus:outline-none focus:border-[#6B5744]"
               />
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#766B60]">%</span>
@@ -145,7 +145,7 @@ export const StatePremiumCard: React.FC = () => {
 
         <div className="flex items-center justify-between pt-1">
           <span className="text-[11px] text-[#766B60]">
-            Effective Multiplier: <strong className="text-[#2F2923]">{(1 + (parseFloat(premiumPct) || 0) / 100).toFixed(2)}x</strong> of base price
+            Labour Multiplier: <strong className="text-[#2F2923]">{(1 + (parseFloat(premiumPct) || 0) / 100).toFixed(2)}x</strong> of base labour charge
           </span>
           <button
             type="submit"

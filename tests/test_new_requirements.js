@@ -82,13 +82,11 @@ async function runTests() {
   console.log('[PASS] makingFor scaled making charge from ₹12/g to ₹24/g (+100% / 2X)');
 
   const normalBreakdown = priceBreakdown(10, 100, normalMaking.labour_per_gram, 0); // 10g @ 100/g silver, 12/g making
-  const premiumBreakdown = priceBreakdown(10, 100, premiumMaking.labour_per_gram, 100); // 10g with 100% premium
+  const premiumBreakdown = priceBreakdown(10, 100, normalMaking.labour_per_gram, 100); // 10g with 100% premium on labour
 
-  assert.strictEqual(premiumBreakdown.silver_amount, normalBreakdown.silver_amount * 2, 'Silver amount should double with 100% premium');
-  assert.strictEqual(premiumBreakdown.labour_amount, normalBreakdown.labour_amount * 2, 'Labour amount should double with 100% premium');
-  assert.strictEqual(premiumBreakdown.subtotal, normalBreakdown.subtotal * 2, 'Subtotal should double with 100% premium');
-  assert.strictEqual(premiumBreakdown.total, normalBreakdown.total * 2, 'Total with GST should double with 100% premium');
-  console.log('[PASS] priceBreakdown accurately calculated 2X premium multiplier for Goa customer');
+  assert.strictEqual(premiumBreakdown.silver_amount, normalBreakdown.silver_amount, 'Silver amount should remain fixed at standard market rate');
+  assert.strictEqual(premiumBreakdown.labour_amount, normalBreakdown.labour_amount * 2, 'Labour amount should double with 100% premium on labour');
+  console.log('[PASS] priceBreakdown accurately calculated 2X premium on labour charges for Goa customer while keeping silver at base market rate');
 
   // List all state premiums
   const listPremiumsRes = await request({

@@ -164,7 +164,7 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
     const unitWeight = pieceWeight(r.std, r.size);
     const { labour, mrp, tier, weightSlab } = makingFor(product, r.std, mode, piecesAfter, gramsAfter, stdGramsAfter(r.std), statePremiumPct);
     const short = isReady && r.pieces > maxFor(r);
-    return { row: r, index: i, unitWeight, labour, mrp, tier, weightSlab, short, breakdown: priceBreakdown(unitWeight * r.pieces, rateNum, labour, statePremiumPct) };
+    return { row: r, index: i, unitWeight, labour, mrp, tier, weightSlab, short, breakdown: priceBreakdown(unitWeight * r.pieces, rateNum, labour, 0) };
   });
   const total = addBreakdowns(priced.map(p => p.breakdown));
   const anyShort = priced.some(p => p.short);
@@ -371,6 +371,14 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Thickness shown under the standard weight to the customers */}
+              <div className="mt-2.5 flex items-center gap-2 text-xs bg-[#FFFCF7] border border-[#D2BFA7] px-3.5 py-1.5 rounded-xl w-fit shadow-xs">
+                <span className="font-semibold text-[#766B60]">Thickness:</span>
+                <span className="font-bold text-[#2F2923]">
+                  {product.weight_options?.find(o => sameNum(o.std_weight_g, stagedStd))?.thickness || product.thickness || '2.0 mm'}
+                </span>
               </div>
             </div>
 

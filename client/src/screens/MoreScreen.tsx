@@ -1,11 +1,12 @@
 import React from 'react';
 import { 
-  Building2, Layers, Settings, LogOut, ChevronRight, HardDrive, Boxes
+  Building2, Layers, Settings, LogOut, ChevronRight, HardDrive, Boxes,
+  Truck, Scale, TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../auth';
 
 interface MoreScreenProps {
-  onNavigate: (route: 'companies' | 'categories' | 'settings' | 'cloud' | 'inventory') => void;
+  onNavigate: (route: 'companies' | 'categories' | 'settings' | 'cloud' | 'inventory' | 'state_pricing' | 'delivery_charges' | 'slab_discounts') => void;
 }
 
 export const MoreScreen: React.FC<MoreScreenProps> = ({ onNavigate }) => {
@@ -131,6 +132,63 @@ export const MoreScreen: React.FC<MoreScreenProps> = ({ onNavigate }) => {
               <div>
                 <h3 className="font-bold text-sm text-[#2F2923]">Categories</h3>
                 <p className="text-xs text-[#766B60]">Chains, earrings, bracelets, and collection tags</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="text-[#B49A7A] shrink-0" />
+          </div>
+        )}
+
+        {/* State Labour Extra Costs: For Administrators */}
+        {canAccessCloud && (
+          <div
+            onClick={() => onNavigate('state_pricing')}
+            className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-xl p-4 shadow-xs flex items-center justify-between hover:border-[#B49A7A] active:bg-[#F5F0E8] transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-lg bg-[#F5F0E8] text-[#6B5744] flex items-center justify-center shrink-0 border border-[#E8DCCB]">
+                <TrendingUp size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#2F2923]">State Labour Extra Cost</h3>
+                <p className="text-xs text-[#766B60]">Extra costs by state in % of labour charges (e.g. Goa +20%)</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="text-[#B49A7A] shrink-0" />
+          </div>
+        )}
+
+        {/* Customize Delivery Charges: For Administrators */}
+        {canAccessCloud && (
+          <div
+            onClick={() => onNavigate('delivery_charges')}
+            className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-xl p-4 shadow-xs flex items-center justify-between hover:border-[#B49A7A] active:bg-[#F5F0E8] transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-lg bg-[#F5F0E8] text-[#6B5744] flex items-center justify-center shrink-0 border border-[#E8DCCB]">
+                <Truck size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#2F2923]">Customize Delivery Charges</h3>
+                <p className="text-xs text-[#766B60]">Upload Excel file, download current list, or edit by PIN</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="text-[#B49A7A] shrink-0" />
+          </div>
+        )}
+
+        {/* Discount on Slab: For Administrators */}
+        {canAccessCloud && (
+          <div
+            onClick={() => onNavigate('slab_discounts')}
+            className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-xl p-4 shadow-xs flex items-center justify-between hover:border-[#B49A7A] active:bg-[#F5F0E8] transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-lg bg-[#F5F0E8] text-[#6B5744] flex items-center justify-center shrink-0 border border-[#E8DCCB]">
+                <Scale size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#2F2923]">Discount on Slab</h3>
+                <p className="text-xs text-[#766B60]">Weight-based labour discounts (₹/g off for 1-2kg, 2kg+)</p>
               </div>
             </div>
             <ChevronRight size={18} className="text-[#B49A7A] shrink-0" />

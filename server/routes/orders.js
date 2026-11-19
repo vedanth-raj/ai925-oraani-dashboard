@@ -4,7 +4,7 @@ const { db } = require('../db/database');
 const { authenticateToken, logAudit } = require('../middleware/auth');
 const { buildPricedItems, sumPricing, insertOrder, restoreReadyStock, currentRateOrZero } = require('../services/orders');
 const { recordPayment, PAYMENT_METHODS } = require('../services/payments');
-const { round2 } = require('../utils/pricing');
+const { round2, getStatePremium } = require('../utils/pricing');
 
 // GET /api/orders (List orders with filters & Sales Rep Isolation)
 router.get('/', authenticateToken, (req, res) => {
@@ -283,7 +283,8 @@ router.post('/', authenticateToken, (req, res) => {
 
   try {
     const result = db.transaction(() => {
-      const lines = buildPricedItems(products, silverRate);
+      const statePremiumPct = customer ? getStatePremium(customer.state) : 0;
+      const lines = buildPricedItems(products, silverRate, 'STANDARD', statePremiumPct);
       return insertOrder({
         customer,
         creatorId,

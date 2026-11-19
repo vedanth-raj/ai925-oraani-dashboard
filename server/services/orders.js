@@ -7,7 +7,8 @@ const {
   getWeightOptions,
   unitWeightFor,
   makingFor,
-  priceBreakdown
+  priceBreakdown,
+  getWeightSlabDiscount
 } = require('../utils/pricing');
 
 // Helper to generate next readable order number like #7095. Follows the highest numeric order number, so
@@ -32,9 +33,11 @@ function getNextOrderNumber() {
 // Weight per piece is the standard (20-inch) weight scaled to the size; the making charge is that
 // weight's base pricing unless a quantity slab for this purchase type matches the product's total
 // pieces / grams in the order. A standard weight with its own slabs is priced by the net grams of that weight.
-// If statePremiumPct > 0, state-based markup is applied.
+// If statePremiumPct > 0, state-based markup is applied to labour. Weight slab discount applies across total order weight.
 function buildPricedItems(products, silverRate, orderType = 'STANDARD', statePremiumPct = 0) {
-  const lines = [];
+  const parsedItems = [];
+  let totalOrderGrams = 0;
+
   for (const prodEntry of products) {
     const prod = db.prepare('SELECT * FROM products WHERE id = ?').get(prodEntry.product_id);
     if (!prod) {
@@ -65,23 +68,52 @@ function buildPricedItems(products, silverRate, orderType = 'STANDARD', statePre
       .reduce((s, x) => s + x.unitWeight * x.pieces, 0);
 
     for (const r of rows) {
-      const { labour_per_gram } = makingFor({
-        product: prod, tiers, weightOptions, stdWeight: r.std, mode: orderType, pieces: productPieces, grams: productGrams,
-        stdGrams: gramsOfStd(r.std), statePremiumPct
-      });
       const expWeight = r.unitWeight * r.pieces;
-      lines.push({
-        product: prod,
-        size_inches: r.sizeInches,
-        std_weight_g: r.std,
-        requested_pieces: r.pieces,
-        unit_weight: round2(r.unitWeight * 1000) / 1000,
-        expected_weight: parseFloat(expWeight.toFixed(2)),
-        labour_per_gram,
-        price: priceBreakdown(expWeight, silverRate, labour_per_gram, statePremiumPct)
+      totalOrderGrams += expWeight;
+      parsedItems.push({
+        prod,
+        tiers,
+        weightOptions,
+        r,
+        expWeight,
+        productPieces,
+        productGrams,
+        gramsOfStd: gramsOfStd(r.std)
       });
     }
   }
+
+  // Weight-based slab discount for total order weight
+  const slabResult = getWeightSlabDiscount(totalOrderGrams);
+  const slabDiscountPerGram = slabResult.discount_per_gram || 0;
+
+  const lines = [];
+  for (const item of parsedItems) {
+    const { labour_per_gram } = makingFor({
+      product: item.prod,
+      tiers: item.tiers,
+      weightOptions: item.weightOptions,
+      stdWeight: item.r.std,
+      mode: orderType,
+      pieces: item.productPieces,
+      grams: item.productGrams,
+      stdGrams: item.gramsOfStd,
+      statePremiumPct
+    });
+
+    lines.push({
+      product: item.prod,
+      size_inches: item.r.sizeInches,
+      std_weight_g: item.r.std,
+      requested_pieces: item.r.pieces,
+      unit_weight: round2(item.r.unitWeight * 1000) / 1000,
+      expected_weight: parseFloat(item.expWeight.toFixed(2)),
+      labour_per_gram,
+      slab_discount_per_gram: slabDiscountPerGram,
+      price: priceBreakdown(item.expWeight, silverRate, labour_per_gram, 0, slabDiscountPerGram)
+    });
+  }
+
   return lines;
 }
 

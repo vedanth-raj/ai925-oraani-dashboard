@@ -232,6 +232,63 @@ function copyFolderExcludingData(src, dest) {
   }
 }
 
+function listGitVersions(limit = 25) {
+  try {
+    const raw = execSync(`git log -n ${limit} --format="%H|%ad|%s" --date=format:"%Y-%m-%d %H:%M:%S"`, {
+      cwd: ROOT_DIR,
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).toString().trim();
+    if (!raw) return [];
+    return raw.split('\n').filter(Boolean).map(line => {
+      const parts = line.split('|');
+      const sha = parts[0] || '';
+      const date = parts[1] || '';
+      const message = parts.slice(2).join('|') || 'Update';
+      return {
+        type: 'git',
+        sha,
+        shortSha: sha.slice(0, 7),
+        created_at: date,
+        message
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function restoreGitVersion(commitSha) {
+  console.log(`\n[1/3] Creating safety backup of current state & database...`);
+  createSnapshot('before_rollback');
+
+  console.log(`\n[2/3] Restoring code files to version [${commitSha.slice(0, 7)}]...`);
+  try {
+    execSync(`git checkout ${commitSha} -- .`, { cwd: ROOT_DIR, stdio: 'inherit' });
+  } catch (err) {
+    execSync(`git reset --hard ${commitSha}`, { cwd: ROOT_DIR, stdio: 'inherit' });
+  }
+
+  // Verify and ensure database integrity
+  try {
+    const { initializeSchema } = require('../server/db/database');
+    initializeSchema();
+  } catch {}
+
+  console.log(`\n[3/3] Rebuilding user interface...`);
+  try {
+    execSync('npm --prefix client run build', { cwd: ROOT_DIR, stdio: 'inherit' });
+  } catch (err) {
+    console.warn('Frontend rebuild warning:', err.message);
+  }
+
+  saveLocalVersion({ sha: commitSha, rolled_back_at: new Date().toISOString() });
+  console.log(`\n======================================================`);
+  console.log(`   SYSTEM RESTORED TO VERSION [${commitSha.slice(0, 7)}]!`);
+  console.log(`   (Zero database loss: All customers & orders intact)`);
+  console.log(`======================================================\n`);
+  return true;
+}
+
 // Restore previous snapshot (Rollback)
 function restoreSnapshot(snapshotId) {
   const targetDir = path.join(BACKUPS_DIR, snapshotId);
@@ -291,34 +348,63 @@ async function main() {
     }
     await applyUpdate(remote);
   } else if (cmd === 'rollback') {
+    const gitVersions = listGitVersions(25);
     const snapshots = listSnapshots();
-    if (snapshots.length === 0) {
-      console.log('\n[NOTICE] No previous safety snapshots found to restore.');
+
+    if (gitVersions.length === 0 && snapshots.length === 0) {
+      console.log('\n[NOTICE] No previous versions or safety snapshots found to restore.');
       return;
     }
 
     console.log('\n======================================================');
     console.log('        AVAILABLE PREVIOUS VERSIONS & SNAPSHOTS       ');
     console.log('======================================================\n');
-    snapshots.forEach((s, idx) => {
-      console.log(`  [${idx + 1}] ${s.created_at.replace('T', ' ').slice(0, 19)} - Commit: ${(s.sha || '').slice(0, 7)}`);
-      console.log(`      "${s.message || s.reason}"`);
-    });
+
+    const allOptions = [];
+
+    if (gitVersions.length > 0) {
+      console.log('--- RECENT SYSTEM RELEASES & UPDATES ---');
+      gitVersions.forEach((v) => {
+        allOptions.push(v);
+        const idx = allOptions.length;
+        console.log(`  [${idx}] ${v.created_at} - Version: [${v.shortSha}]`);
+        console.log(`      Change: "${v.message}"\n`);
+      });
+    }
+
+    if (snapshots.length > 0) {
+      console.log('--- LOCAL DATABASE SAFETY SNAPSHOTS ---');
+      snapshots.forEach((s) => {
+        allOptions.push({ type: 'snapshot', ...s });
+        const idx = allOptions.length;
+        console.log(`  [${idx}] ${s.created_at.replace('T', ' ').slice(0, 19)} - Snapshot [${(s.sha || '').slice(0, 7)}]`);
+        console.log(`      Backup: "${s.message || s.reason}"\n`);
+      });
+    }
 
     const readline = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-    readline.question('\nEnter number of snapshot to restore (default 1): ', (ans) => {
+    readline.question('\nEnter number of version to restore (or press Enter to cancel): ', (ans) => {
       readline.close();
-      const choice = parseInt(ans.trim() || '1', 10);
-      const selected = snapshots[choice - 1];
+      const input = ans.trim();
+      if (!input) {
+        console.log('Rollback cancelled. No changes made.');
+        return;
+      }
+      const choice = parseInt(input, 10);
+      const selected = allOptions[choice - 1];
       if (!selected) {
         console.error('Invalid selection.');
         return;
       }
-      restoreSnapshot(selected.id);
-      console.log('Rebuilding client after rollback...');
-      try {
-        execSync('npm --prefix client run build', { cwd: ROOT_DIR, stdio: 'inherit' });
-      } catch {}
+      if (selected.type === 'git') {
+        restoreGitVersion(selected.sha);
+      } else {
+        restoreSnapshot(selected.id);
+        console.log('Rebuilding client after rollback...');
+        try {
+          execSync('npm --prefix client run build', { cwd: ROOT_DIR, stdio: 'inherit' });
+        } catch {}
+      }
       console.log('Rollback finished. You can now launch the app.');
     });
   }

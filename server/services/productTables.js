@@ -178,12 +178,13 @@ function saveWeightOptions(productId, rows) {
   const now = new Date().toISOString();
   db.prepare('DELETE FROM product_weight_options WHERE product_id = ?').run(productId);
   const insert = db.prepare(`
-    INSERT INTO product_weight_options (id, product_id, std_weight_g, making_charge, sku_code, wire_size, endings, lock_type, extra, weight_slabs, sort_order, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO product_weight_options (id, product_id, std_weight_g, making_charge, sku_code, wire_size, endings, lock_type, extra, weight_slabs, sort_order, created_at, thickness)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const r of rows) {
+    const thk = r.thickness || (r.wire_size ? (r.wire_size.includes('mm') ? r.wire_size : r.wire_size + ' mm') : null);
     insert.run(newRowId('wopt'), productId, r.std_weight_g, r.making_charge, r.sku_code, r.wire_size, r.endings, r.lock_type,
-      JSON.stringify(r.extra || {}), JSON.stringify(r.weight_slabs || []), r.sort_order, now);
+      JSON.stringify(r.extra || {}), JSON.stringify(r.weight_slabs || []), r.sort_order, now, thk);
   }
 }
 
@@ -208,6 +209,7 @@ function summaryFromOptions(options) {
     std_weight_per_20in: first.std_weight_g,
     labour_per_gram: priced ? priced.making_charge : null,
     wire_size: first.wire_size,
+    thickness: first.thickness || (first.wire_size ? (first.wire_size.includes('mm') ? first.wire_size : first.wire_size + ' mm') : '2.0 mm'),
     endings: first.endings,
     lock_type: first.lock_type || null
   };

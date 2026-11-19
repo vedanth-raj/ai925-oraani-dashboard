@@ -1,4 +1,4 @@
-import type { CatalogProduct } from '../api';
+import type { CatalogProduct, WeightSlabDiscount } from '../api';
 import { addBreakdowns, makingFor, priceBreakdown, sameNum, unitWeightFor, MIN_ORDER_GRAMS, type Breakdown } from '../pricing';
 
 export type PurchaseMode = 'READY_STOCK' | 'ON_ORDER';
@@ -95,26 +95,73 @@ export interface PricedCart {
   labourUniform: number | null;
   gramsShort: number; // grams still needed to reach the minimum order weight (0 when met)
   issues: string[];
+  activeSlabDiscount: number;
+  matchedSlab: WeightSlabDiscount | null;
 }
 
 const round3 = (n: number) => parseFloat(n.toFixed(3));
 
 // Same rules as the server: a standard weight with its own slabs is priced by the net grams of that weight in
 // this cart; otherwise the product's slab for this purchase type by its total pieces / grams, else the weight's
-// pricing. The cart needs at least MIN_ORDER_GRAMS of silver for its purchase type to check out.
-export function priceCart(lines: CartLine[], products: Record<string, CatalogProduct>, silverRate: number, mode: PurchaseMode): PricedCart {
+// pricing. If statePremiumPct is provided, state labour adjustment is applied. Weight slab discounts apply by total order weight.
+export function priceCart(
+  lines: CartLine[],
+  products: Record<string, CatalogProduct>,
+  silverRate: number,
+  mode: PurchaseMode,
+  statePremiumPct = 0,
+  weightSlabDiscounts: WeightSlabDiscount[] = []
+): PricedCart {
   const issues: string[] = [];
+
+  // Calculate total order grams across valid lines
+  const totalGrams = lines.reduce((sum, line) => {
+    const prod = products[line.product_id];
+    return sum + (prod ? lineUnitWeight(line, prod) * line.pieces : 0);
+  }, 0);
+  const totalKg = totalGrams / 1000;
+
+  // Find matching active weight slab discount
+  let activeSlabDiscount = 0;
+  let matchedSlab: WeightSlabDiscount | null = null;
+  const sortedSlabs = [...weightSlabDiscounts].sort((a, b) => (Number(b.min_kg) || 0) - (Number(a.min_kg) || 0));
+  for (const slab of sortedSlabs) {
+    if (slab.is_active !== false) {
+      const min = Number(slab.min_kg) || 0;
+      const max = slab.max_kg === null || slab.max_kg === undefined ? null : Number(slab.max_kg);
+      if (totalKg >= min && (max === null || totalKg < max)) {
+        activeSlabDiscount = Number(slab.discount_per_gram) || 0;
+        matchedSlab = slab;
+        break;
+      }
+    }
+  }
+
   const rows: PricedLine[] = lines.map(line => {
     const product = products[line.product_id];
     if (!product) {
       return { line, product, unitWeight: 0, labour: 0, breakdown: priceBreakdown(0, 0, 0), stockShort: false };
     }
-    const { labour } = makingFor(product, line.std_weight_g ?? null, mode, productQty(lines, product.id), productGrams(lines, product),
-      stdGrams(lines, product, line.std_weight_g));
+    const { labour } = makingFor(
+      product,
+      line.std_weight_g ?? null,
+      mode,
+      productQty(lines, product.id),
+      productGrams(lines, product),
+      stdGrams(lines, product, line.std_weight_g),
+      statePremiumPct
+    );
     const unitWeight = lineUnitWeight(line, product);
     const size = readyRowFor(product, line);
     const stockShort = mode === 'READY_STOCK' && (!size || size.stock_qty < line.pieces);
-    return { line, product, unitWeight, labour, breakdown: priceBreakdown(unitWeight * line.pieces, silverRate, labour), stockShort };
+    return {
+      line,
+      product,
+      unitWeight,
+      labour,
+      breakdown: priceBreakdown(unitWeight * line.pieces, silverRate, labour, 0, activeSlabDiscount),
+      stockShort
+    };
   });
 
   for (const r of rows) {
@@ -129,6 +176,9 @@ export function priceCart(lines: CartLine[], products: Record<string, CatalogPro
   }
 
   const total = addBreakdowns(rows.map(r => r.breakdown));
+  total.state_premium_pct = statePremiumPct;
+  total.slab_discount_per_gram = activeSlabDiscount;
+
   const minGrams = MIN_ORDER_GRAMS[mode];
   const gramsShort = rows.length > 0 && total.weight_g < minGrams ? round3(minGrams - total.weight_g) : 0;
   if (gramsShort > 0) {
@@ -141,6 +191,8 @@ export function priceCart(lines: CartLine[], products: Record<string, CatalogPro
     total,
     gramsShort,
     labourUniform: labours.length === 1 ? labours[0] : null,
-    issues
+    issues,
+    activeSlabDiscount,
+    matchedSlab
   };
 }

@@ -223,7 +223,10 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ mode, onBack, onSe
               <div className="p-2.5">
                 <p className="text-sm font-bold text-[#2F2923] leading-snug line-clamp-2">{p.name}</p>
                 {productWeights(p, mode).length > 0 && (
-                  <p className="text-[10px] font-semibold text-[#6B5744] truncate">{productWeights(p, mode).map(w => formatGrams(w)).join(' · ')}</p>
+                  <p className="text-[10px] font-semibold text-[#6B5744] truncate">
+                    {productWeights(p, mode).map(w => formatGrams(w)).join(' · ')}
+                    {p.thickness && <span className="text-[#766B60] font-normal"> · {p.thickness}</span>}
+                  </p>
                 )}
               </div>
             </button>

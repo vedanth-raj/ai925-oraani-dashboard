@@ -1,15 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const XLSX = require('xlsx');
 const { db } = require('../db/database');
 const { authenticateAny, authenticateToken, requireAdminOrBusinessAdmin, logAudit } = require('../middleware/auth');
 const {
   GST_RATE,
+  round2,
   getCurrentSilverRate,
   recordSilverRate,
   refreshSilverRate,
   setSetting
 } = require('../utils/pricing');
 const { getDeliveryRates, parseDeliveryRates, getPaymentTerms, parsePaymentTerms, setJson } = require('../services/commerce');
+
+const uploadExcel = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // GET /api/pricing/silver-rate (staff and approved customers)
 router.get('/silver-rate', authenticateAny, (req, res) => {
@@ -140,6 +145,210 @@ router.delete('/state-premiums/:id', authenticateToken, requireAdminOrBusinessAd
   db.prepare('DELETE FROM state_premiums WHERE id = ?').run(existing.id);
   logAudit(req.user.id, 'DELETE_STATE_PREMIUM', 'state_premiums', existing.id, `Removed state premium for ${existing.state}`, req);
   res.json({ success: true, message: `Removed premium rule for ${existing.state}`, state_premiums: db.prepare('SELECT * FROM state_premiums ORDER BY state ASC').all() });
+});
+
+// =========================================================================
+// CUSTOM DELIVERY CHARGES BY PINCODE (Excel Upload, Download & Single Edit)
+// =========================================================================
+
+// GET /api/pricing/delivery-pincodes
+router.get('/delivery-pincodes', authenticateAny, (req, res) => {
+  const search = String(req.query.search || '').trim();
+  let query = 'SELECT * FROM delivery_pincodes';
+  const params = [];
+  if (search) {
+    query += ' WHERE pincode LIKE ? OR city LIKE ? OR state LIKE ?';
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  query += ' ORDER BY pincode ASC LIMIT 500';
+  const rows = db.prepare(query).all(...params);
+  const countRow = db.prepare('SELECT COUNT(*) as total FROM delivery_pincodes').get();
+  res.json({ delivery_pincodes: rows, total_count: countRow ? countRow.total : 0 });
+});
+
+// GET /api/pricing/delivery-pincodes/export (Download current Excel or CSV file)
+router.get('/delivery-pincodes/export', authenticateToken, (req, res) => {
+  const rows = db.prepare('SELECT pincode, charge, city, state, updated_at FROM delivery_pincodes ORDER BY pincode ASC').all();
+  const format = req.query.format || 'xlsx';
+
+  if (format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="delivery_charges.csv"');
+    const header = 'Pincode,Delivery Charge (INR),City,State,Last Updated\n';
+    const lines = rows.map(r => `"${r.pincode}",${r.charge},"${r.city || ''}","${r.state || ''}","${r.updated_at}"`).join('\n');
+    return res.send(header + lines);
+  }
+
+  const exportData = rows.length > 0 ? rows.map(r => ({
+    'Pincode': r.pincode,
+    'Delivery Charge (INR)': r.charge,
+    'City': r.city || '',
+    'State': r.state || '',
+    'Last Updated': r.updated_at
+  })) : [
+    { 'Pincode': '403001', 'Delivery Charge (INR)': 150, 'City': 'Panaji', 'State': 'Goa', 'Last Updated': new Date().toISOString() },
+    { 'Pincode': '400001', 'Delivery Charge (INR)': 100, 'City': 'Mumbai', 'State': 'Maharashtra', 'Last Updated': new Date().toISOString() },
+    { 'Pincode': '560001', 'Delivery Charge (INR)': 120, 'City': 'Bangalore', 'State': 'Karnataka', 'Last Updated': new Date().toISOString() }
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  XLSX.utils.book_append_sheet(wb, ws, 'Delivery Charges');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="delivery_charges.xlsx"');
+  res.send(buffer);
+});
+
+// POST /api/pricing/delivery-pincodes/upload (Excel / CSV upload)
+router.post('/delivery-pincodes/upload', authenticateToken, requireAdminOrBusinessAdmin, uploadExcel.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Please select an Excel (.xlsx / .xls) or CSV file to upload' });
+  }
+
+  try {
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ error: 'The uploaded file contains no data rows' });
+    }
+
+    let updatedCount = 0;
+    const now = new Date().toISOString();
+    const insertStmt = db.prepare(`
+      INSERT INTO delivery_pincodes (pincode, charge, city, state, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(pincode) DO UPDATE SET
+        charge = excluded.charge,
+        city = COALESCE(NULLIF(excluded.city, ''), delivery_pincodes.city),
+        state = COALESCE(NULLIF(excluded.state, ''), delivery_pincodes.state),
+        updated_at = excluded.updated_at
+    `);
+
+    db.transaction(() => {
+      for (const row of rows) {
+        const pinKey = Object.keys(row).find(k => /pincode|pin_code|pin|postal/i.test(k));
+        const chargeKey = Object.keys(row).find(k => /charge|delivery_charge|delivery|rate|cost|fee|amount/i.test(k));
+        const cityKey = Object.keys(row).find(k => /city|district/i.test(k));
+        const stateKey = Object.keys(row).find(k => /state|region/i.test(k));
+
+        if (!pinKey) continue;
+        const rawPin = String(row[pinKey] || '').replace(/\D/g, '');
+        if (rawPin.length !== 6) continue;
+
+        const rawCharge = chargeKey ? parseFloat(row[chargeKey]) : 0;
+        const charge = isNaN(rawCharge) || rawCharge < 0 ? 0 : round2(rawCharge);
+        const city = cityKey ? String(row[cityKey] || '').trim() : '';
+        const state = stateKey ? String(row[stateKey] || '').trim() : '';
+
+        insertStmt.run(rawPin, charge, city, state, now);
+        updatedCount++;
+      }
+    })();
+
+    logAudit(req.user.id, 'UPLOAD_DELIVERY_PINCODES', 'delivery_pincodes', null, `Imported ${updatedCount} delivery pincodes from file`, req);
+    res.json({
+      success: true,
+      message: `Successfully processed and updated ${updatedCount} pincodes from file.`,
+      count: updatedCount
+    });
+  } catch (err) {
+    res.status(400).json({ error: `Could not parse file: ${err.message}` });
+  }
+});
+
+// POST /api/pricing/delivery-pincodes/single { pincode, charge, city, state }
+router.post('/delivery-pincodes/single', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const { pincode, charge, city = '', state = '' } = req.body;
+  const pin = String(pincode || '').replace(/\D/g, '');
+  if (pin.length !== 6) {
+    return res.status(400).json({ error: 'Please enter a valid 6-digit Indian PIN code' });
+  }
+  const numCharge = parseFloat(charge);
+  if (isNaN(numCharge) || numCharge < 0) {
+    return res.status(400).json({ error: 'Delivery charge must be a non-negative number' });
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO delivery_pincodes (pincode, charge, city, state, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(pincode) DO UPDATE SET
+      charge = excluded.charge,
+      city = COALESCE(NULLIF(excluded.city, ''), delivery_pincodes.city),
+      state = COALESCE(NULLIF(excluded.state, ''), delivery_pincodes.state),
+      updated_at = excluded.updated_at
+  `).run(pin, round2(numCharge), String(city || '').trim(), String(state || '').trim(), now);
+
+  logAudit(req.user.id, 'SET_DELIVERY_PINCODE', 'delivery_pincodes', pin, `Set delivery charge for ${pin} to Rs.${numCharge}`, req);
+  res.json({ success: true, message: `Delivery charge of ₹${numCharge} saved for PIN ${pin}` });
+});
+
+// DELETE /api/pricing/delivery-pincodes/:pincode
+router.delete('/delivery-pincodes/:pincode', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const pin = String(req.params.pincode || '').replace(/\D/g, '');
+  db.prepare('DELETE FROM delivery_pincodes WHERE pincode = ?').run(pin);
+  logAudit(req.user.id, 'DELETE_DELIVERY_PINCODE', 'delivery_pincodes', pin, `Removed custom delivery charge for PIN ${pin}`, req);
+  res.json({ success: true, message: `Removed custom delivery charge for PIN ${pin}` });
+});
+
+// =========================================================================
+// WEIGHT SLAB DISCOUNTS (Discount on Labour Charges in Rs/g based on total kg)
+// =========================================================================
+
+// GET /api/pricing/weight-slab-discounts (staff & portal)
+router.get('/weight-slab-discounts', authenticateAny, (req, res) => {
+  const slabs = db.prepare('SELECT * FROM weight_slab_discounts ORDER BY min_kg ASC').all();
+  res.json({ weight_slab_discounts: slabs });
+});
+
+// POST /api/pricing/weight-slab-discounts (Admin & Business Admin)
+router.post('/weight-slab-discounts', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const { min_kg, max_kg, discount_per_gram, is_active = 1 } = req.body;
+  const min = parseFloat(min_kg);
+  const max = max_kg === null || max_kg === undefined || max_kg === '' ? null : parseFloat(max_kg);
+  const discount = parseFloat(discount_per_gram);
+
+  if (isNaN(min) || min < 0) {
+    return res.status(400).json({ error: 'Minimum weight must be 0 kg or more' });
+  }
+  if (max !== null && (isNaN(max) || max <= min)) {
+    return res.status(400).json({ error: 'Maximum weight must be greater than minimum weight' });
+  }
+  if (isNaN(discount) || discount < 0) {
+    return res.status(400).json({ error: 'Discount per gram must be 0 or more' });
+  }
+
+  const id = 'slab_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO weight_slab_discounts (id, min_kg, max_kg, discount_per_gram, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, min, max, round2(discount), is_active ? 1 : 0, now, now);
+
+  logAudit(req.user.id, 'ADD_WEIGHT_SLAB_DISCOUNT', 'weight_slab_discounts', id, `Added discount slab: ${min}kg-${max || 'above'}: Rs.${discount}/g off labour`, req);
+  res.json({
+    success: true,
+    message: `Added slab discount of ₹${discount}/g for ${min}kg to ${max ? max + 'kg' : 'above'}`,
+    weight_slab_discounts: db.prepare('SELECT * FROM weight_slab_discounts ORDER BY min_kg ASC').all()
+  });
+});
+
+// DELETE /api/pricing/weight-slab-discounts/:id (Admin & Business Admin)
+router.delete('/weight-slab-discounts/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const { id } = req.params;
+  db.prepare('DELETE FROM weight_slab_discounts WHERE id = ?').run(id);
+  logAudit(req.user.id, 'DELETE_WEIGHT_SLAB_DISCOUNT', 'weight_slab_discounts', id, `Deleted discount slab ${id}`, req);
+  res.json({
+    success: true,
+    message: 'Weight slab discount removed',
+    weight_slab_discounts: db.prepare('SELECT * FROM weight_slab_discounts ORDER BY min_kg ASC').all()
+  });
 });
 
 module.exports = router;

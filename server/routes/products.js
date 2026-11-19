@@ -301,6 +301,7 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
     sku,
     category_id,
     wire_size,
+    thickness,
     endings,
     lock_type,
     std_weight_per_20in,
@@ -352,8 +353,8 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
         INSERT INTO products (
           id, name, sku, category_id, description, wire_size, endings, lock_type,
           std_weight_per_20in, physical_stock, reserved_stock, reorder_threshold, status,
-          image_path, created_at, updated_at, labour_per_gram, weight_columns, image_paths
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+          image_path, created_at, updated_at, labour_per_gram, weight_columns, image_paths, thickness
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         name.trim(),
@@ -372,7 +373,8 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
         now,
         labour,
         JSON.stringify(tables.columns || []),
-        JSON.stringify(storedImages)
+        JSON.stringify(storedImages),
+        summary.thickness ?? (thickness || '2.0 mm')
       );
 
       // Log initial stock intake in inventory movement ledger
@@ -402,6 +404,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
     sku,
     category_id,
     wire_size,
+    thickness,
     endings,
     lock_type,
     std_weight_per_20in,
@@ -453,6 +456,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
           sku = COALESCE(?, sku),
           category_id = COALESCE(?, category_id),
           wire_size = COALESCE(?, wire_size),
+          thickness = COALESCE(?, thickness),
           endings = COALESCE(?, endings),
           lock_type = COALESCE(?, lock_type),
           std_weight_per_20in = ?,
@@ -470,6 +474,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
         sku ? sku.trim() : null,
         category_id !== undefined ? category_id : null,
         summary.wire_size ?? wire_size,
+        summary.thickness ?? thickness,
         summary.endings ?? endings,
         summary.lock_type || lock_type,
         weight,

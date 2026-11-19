@@ -96,15 +96,6 @@ body {
   -webkit-touch-callout: none !important;
 }
 
-/* Method A: Banking touch-to-reveal privacy shield */
-#touch-privacy-veil {
-  touch-action: manipulation;
-  -webkit-user-select: none !important;
-  user-select: none !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
 /* Banking app style black screen on screenshot / blur / app switch */
 body.screen-blackout,
 body.screen-blackout #root,

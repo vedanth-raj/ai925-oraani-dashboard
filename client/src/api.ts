@@ -437,6 +437,37 @@ export const api = {
       method: 'DELETE'
     }),
 
+  // Custom delivery charges by PIN code (Excel Upload, Download & Single Edit)
+  getDeliveryPincodes: (search?: string) =>
+    request<{ delivery_pincodes: DeliveryPincode[]; total_count: number }>(`/pricing/delivery-pincodes${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  saveDeliveryPincodeSingle: (data: { pincode: string; charge: number; city?: string; state?: string }) =>
+    request<{ success: boolean; message: string }>('/pricing/delivery-pincodes/single', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  deleteDeliveryPincode: (pincode: string) =>
+    request<{ success: boolean; message: string }>(`/pricing/delivery-pincodes/${pincode}`, {
+      method: 'DELETE'
+    }),
+  uploadDeliveryPincodesFile: (formData: FormData) =>
+    request<{ success: boolean; message: string; count: number }>('/pricing/delivery-pincodes/upload', {
+      method: 'POST',
+      body: formData
+    }),
+
+  // Weight slab discounts (Rs/g discount on labour charges)
+  getWeightSlabDiscounts: () =>
+    request<{ weight_slab_discounts: WeightSlabDiscount[] }>('/pricing/weight-slab-discounts'),
+  addWeightSlabDiscount: (data: { min_kg: number; max_kg: number | null; discount_per_gram: number; is_active?: boolean }) =>
+    request<{ success: boolean; message: string; weight_slab_discounts: WeightSlabDiscount[] }>('/pricing/weight-slab-discounts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  deleteWeightSlabDiscount: (id: string) =>
+    request<{ success: boolean; message: string; weight_slab_discounts: WeightSlabDiscount[] }>(`/pricing/weight-slab-discounts/${id}`, {
+      method: 'DELETE'
+    }),
+
   // Staff inbox: seller requests, new customer verification, on-order requests
   getRequestsSummary: () => request<RequestsSummary>('/requests/summary'),
   getStockRequests: (status?: string) =>
@@ -615,10 +646,10 @@ export const portalApi = {
     portalRequest<{ ok: boolean }>('/presence', { method: 'POST', body: JSON.stringify(coords || {}) }),
   getProducts: (params: { mode: 'ready' | 'order'; search?: string; category?: string }) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString();
-    return portalRequest<{ products: CatalogProduct[]; categories: string[]; silver_rate: SilverRate }>(`/products?${q}`);
+    return portalRequest<{ products: CatalogProduct[]; categories: string[]; silver_rate: SilverRate; weight_slab_discounts?: WeightSlabDiscount[] }>(`/products?${q}`);
   },
   getProduct: (id: string, mode?: 'READY_STOCK' | 'ON_ORDER') =>
-    portalRequest<{ product: CatalogProduct; silver_rate: SilverRate }>(`/products/${id}${mode ? `?mode=${mode}` : ''}`),
+    portalRequest<{ product: CatalogProduct; silver_rate: SilverRate; weight_slab_discounts?: WeightSlabDiscount[] }>(`/products/${id}${mode ? `?mode=${mode}` : ''}`),
   requestStock: (data: { product_id: string; size_inches?: number | null; quantity: number; notes?: string }) =>
     portalRequest<{ request: any; message: string }>('/stock-requests', { method: 'POST', body: JSON.stringify(data) }),
   getStockRequests: () => portalRequest<{ requests: any[] }>('/stock-requests'),
@@ -715,6 +746,24 @@ export interface StatePremium {
   updated_at: string;
 }
 
+export interface DeliveryPincode {
+  pincode: string;
+  charge: number;
+  city?: string;
+  state?: string;
+  updated_at: string;
+}
+
+export interface WeightSlabDiscount {
+  id: string;
+  min_kg: number;
+  max_kg: number | null;
+  discount_per_gram: number;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type AccountType = 'Retailer' | 'Wholesaler' | 'Both';
 export const ACCOUNT_TYPES: AccountType[] = ['Retailer', 'Wholesaler', 'Both'];
 
@@ -801,6 +850,7 @@ export interface WeightOption {
   sku_code: string | null;
   lock_type: string | null;
   wire_size?: string | null;
+  thickness?: string | null;
   endings?: string | null;
   extra?: Record<string, string>;
 }
@@ -822,6 +872,7 @@ export interface CatalogProduct {
   category_name: string | null;
   description: string | null;
   lock_type: string | null;
+  thickness?: string | null;
   image_path: string | null;
   image_paths?: string[]; // every photo in order; the first is image_path
   std_weight_per_20in: number;

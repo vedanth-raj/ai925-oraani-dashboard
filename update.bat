@@ -5,7 +5,7 @@ title AI925 & Oraani System Live Updater
 cd /d "%~dp0"
 
 echo ======================================================
-echo    AI925 & ORAANI ORDER MANAGEMENT SYSTEM UPDATER
+echo    AI925 ^& ORAANI ORDER MANAGEMENT SYSTEM UPDATER
 echo ======================================================
 echo.
 

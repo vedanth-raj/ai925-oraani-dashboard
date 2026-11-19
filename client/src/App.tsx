@@ -27,6 +27,9 @@ const SettingsScreen = named(() => import('./screens/SettingsScreen'), 'Settings
 const MoreScreen = named(() => import('./screens/MoreScreen'), 'MoreScreen');
 const PrivateCloudScreen = named(() => import('./screens/PrivateCloudScreen'), 'PrivateCloudScreen');
 const WholeInventoryScreen = named(() => import('./screens/WholeInventoryScreen'), 'WholeInventoryScreen');
+const StatePricingScreen = named(() => import('./screens/StatePricingScreen'), 'StatePricingScreen');
+const DeliveryChargesScreen = named(() => import('./screens/DeliveryChargesScreen'), 'DeliveryChargesScreen');
+const SlabDiscountsScreen = named(() => import('./screens/SlabDiscountsScreen'), 'SlabDiscountsScreen');
 const RequestsScreen = named(() => import('./screens/RequestsScreen'), 'RequestsScreen');
 const CustomerAuthScreen = named(() => import('./customer/CustomerAuthScreen'), 'CustomerAuthScreen');
 const CustomerPortal = named(() => import('./customer/CustomerPortal'), 'CustomerPortal');
@@ -54,6 +57,9 @@ type SubView =
   | { type: 'settings' }
   | { type: 'cloud' }
   | { type: 'inventory' }
+  | { type: 'state_pricing' }
+  | { type: 'delivery_charges' }
+  | { type: 'slab_discounts' }
   | { type: 'requests'; tab: RequestsTab };
 
 // Signed-out entry: customer landing (sign in / sign up), customer portal, or staff login
@@ -261,6 +267,9 @@ function MainApp() {
                   else if (route === 'settings') pushView({ type: 'settings' });
                   else if (route === 'cloud') pushView({ type: 'cloud' });
                   else if (route === 'inventory') pushView({ type: 'inventory' });
+                  else if (route === 'state_pricing') pushView({ type: 'state_pricing' });
+                  else if (route === 'delivery_charges') pushView({ type: 'delivery_charges' });
+                  else if (route === 'slab_discounts') pushView({ type: 'slab_discounts' });
                 }}
               />
             );
@@ -400,6 +409,15 @@ function MainApp() {
             onBack={popView}
           />
         );
+
+      case 'state_pricing':
+        return <StatePricingScreen onBack={popView} />;
+
+      case 'delivery_charges':
+        return <DeliveryChargesScreen onBack={popView} />;
+
+      case 'slab_discounts':
+        return <SlabDiscountsScreen onBack={popView} />;
 
       case 'requests':
         return (

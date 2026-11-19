@@ -28,6 +28,7 @@ export interface Breakdown {
   gst_amount: number;
   total: number;
   state_premium_pct?: number;
+  slab_discount_per_gram?: number;
 }
 
 export function applyStatePremium(val: number, premiumPct = 0): number {
@@ -35,22 +36,29 @@ export function applyStatePremium(val: number, premiumPct = 0): number {
   return (Number(val) || 0) * (1 + Number(premiumPct) / 100);
 }
 
-// Silver per gram + labour per gram, then 3% GST on the whole.
-export function priceBreakdown(weightG: number, silverRate: number, labourPerGram: number, statePremiumPct = 0): Breakdown {
-  const effectiveSilver = applyStatePremium(silverRate, statePremiumPct);
-  const effectiveLabour = applyStatePremium(labourPerGram, statePremiumPct);
-  const silver = round2(effectiveSilver * weightG);
+// Silver per gram + labour per gram (with state extra cost on labour and slab discount in Rs/g), then 3% GST.
+export function priceBreakdown(
+  weightG: number,
+  silverRate: number,
+  labourPerGram: number,
+  statePremiumPct = 0,
+  slabDiscountPerGram = 0
+): Breakdown {
+  const scaledLabour = round2(applyStatePremium(labourPerGram, statePremiumPct));
+  const effectiveLabour = Math.max(0, round2(scaledLabour - (Number(slabDiscountPerGram) || 0)));
+  const silver = round2((Number(silverRate) || 0) * weightG);
   const labour = round2(effectiveLabour * weightG);
   const subtotal = round2(silver + labour);
   const gst = round2(subtotal * GST_RATE);
   return {
-    weight_g: weightG,
+    weight_g: round2(weightG * 1000) / 1000,
     silver_amount: silver,
     labour_amount: labour,
     subtotal,
     gst_amount: gst,
     total: round2(subtotal + gst),
-    state_premium_pct: Number(statePremiumPct) || 0
+    state_premium_pct: Number(statePremiumPct) || 0,
+    slab_discount_per_gram: Number(slabDiscountPerGram) || 0
   };
 }
 
