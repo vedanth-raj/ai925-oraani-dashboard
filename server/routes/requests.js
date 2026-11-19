@@ -8,6 +8,11 @@ const { encrypt, decrypt } = require('../utils/secrets');
 
 const newId = prefix => prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
 
+function normalizePhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
 router.use(authenticateToken, requireAdminOrBusinessAdmin);
 
 // GET /api/requests/summary (badge counts for the dashboard panels)
@@ -184,23 +189,68 @@ router.get('/customer-accounts', (req, res) => {
 function activateAccount(account, approverId) {
   const now = new Date().toISOString();
   const accountBrand = account.brand || 'AI925';
-  let customer = db.prepare("SELECT id FROM customers WHERE REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ? AND is_archived = 0").get(account.phone.slice(-10));
+  const cleanPhone = normalizePhone(account.phone);
+  let customer = db.prepare("SELECT id FROM customers WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?) AND is_archived = 0").get(cleanPhone, cleanPhone);
   if (!customer) {
-    const customerId = 'cust_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+    const customerId = cleanPhone ? 'cust_' + cleanPhone : 'cust_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+    const existingId = db.prepare('SELECT id FROM customers WHERE id = ?').get(customerId);
+    const finalId = existingId ? 'cust_' + Date.now().toString(36) + '_' + (cleanPhone || 'id') : customerId;
+
     db.prepare(`
       INSERT INTO customers (
         id, poc_name, company_name, phone, email, address, zone, notes, category, country, brand,
         created_by_id, rep_edit_count, is_archived, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, 'West', 'Registered via customer portal', ?, 'India', ?, ?, 0, 0, ?, ?)
-    `).run(customerId, account.full_name, account.company_name || account.full_name, account.phone, account.email, account.address,
+    `).run(finalId, account.full_name, account.company_name || account.full_name, cleanPhone, account.email, account.address,
       account.account_type || 'Retailer', accountBrand, approverId, now, now);
-    if (account.pin_code) db.prepare('UPDATE customers SET pin_code = ? WHERE id = ?').run(account.pin_code, customerId);
-    customer = { id: customerId };
+    if (account.pin_code) db.prepare('UPDATE customers SET pin_code = ? WHERE id = ?').run(account.pin_code, finalId);
+    customer = { id: finalId };
   } else {
-    db.prepare('UPDATE customers SET brand = COALESCE(brand, ?) WHERE id = ?').run(accountBrand, customer.id);
+    db.prepare('UPDATE customers SET brand = COALESCE(brand, ?), phone = ? WHERE id = ?').run(accountBrand, cleanPhone, customer.id);
   }
   db.prepare("UPDATE customer_accounts SET status = 'APPROVED', customer_id = ?, updated_at = ? WHERE id = ?").run(customer.id, now, account.id);
 }
+
+// DELETE /api/requests/customer-accounts/:id
+// Admin: Delete portal account, approval history, orders and wipe customer completely
+router.delete('/customer-accounts/:id', (req, res) => {
+  const account = db.prepare('SELECT * FROM customer_accounts WHERE id = ?').get(req.params.id);
+  if (!account) {
+    return res.status(404).json({ error: 'Customer account not found' });
+  }
+
+  const cleanPhone = account.phone ? normalizePhone(account.phone) : '';
+
+  db.transaction(() => {
+    // 1. Delete all child records of this portal account
+    db.prepare('DELETE FROM stock_requests WHERE customer_account_id = ?').run(account.id);
+    db.prepare('DELETE FROM call_bookings WHERE customer_account_id = ?').run(account.id);
+    db.prepare('DELETE FROM customer_change_requests WHERE customer_account_id = ?').run(account.id);
+    db.prepare('DELETE FROM customer_password_history WHERE customer_account_id = ?').run(account.id);
+    db.prepare('DELETE FROM customer_accounts WHERE id = ?').run(account.id);
+
+    // 2. If linked to customer in customers table, wipe that customer too
+    const custId = account.customer_id;
+    if (custId) {
+      const orderIds = db.prepare('SELECT id FROM orders WHERE customer_id = ?').all(custId).map(r => r.id);
+      for (const ordId of orderIds) {
+        db.prepare('DELETE FROM delivery_items WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_id = ?)').run(ordId);
+        db.prepare('DELETE FROM deliveries WHERE order_id = ?').run(ordId);
+        db.prepare('DELETE FROM payments WHERE order_id = ?').run(ordId);
+        db.prepare('DELETE FROM order_items WHERE order_id = ?').run(ordId);
+      }
+      db.prepare('DELETE FROM orders WHERE customer_id = ?').run(custId);
+      db.prepare('DELETE FROM customers WHERE id = ?').run(custId);
+    }
+    if (cleanPhone) {
+      db.prepare("DELETE FROM customers WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?)").run(cleanPhone, cleanPhone);
+    }
+  })();
+
+  logAudit(req.user.id, 'DELETE_CUSTOMER_ACCOUNT', 'customer_accounts', account.id, `Completely deleted customer account ${account.full_name} (${account.phone}) and wiped approval history`, req);
+
+  res.json({ success: true, message: `Customer account "${account.full_name}" deleted completely from approval history.` });
+});
 
 // POST /api/requests/customer-accounts/:id/approve
 // Business Admin records the business approval, System Admin the system approval; either one activates the account.

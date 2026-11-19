@@ -105,6 +105,9 @@ async function runTests() {
   // 3. Multi-Brand Customers and Orders (Requirement 1, 2, 4)
   console.log('\n>>> Testing Multi-Brand Customers & Orders (Requirements 1, 2, 4)...');
 
+  const oraaniPhone = '9' + Math.floor(100000000 + Math.random() * 900000000);
+  const aiPhone = '9' + Math.floor(100000000 + Math.random() * 900000000);
+
   // Create Oraani Customer
   const oraaniCustRes = await request({
     hostname: 'localhost',
@@ -115,7 +118,7 @@ async function runTests() {
   }, {
     poc_name: 'Oraani Test Customer',
     company_name: 'Oraani Jewels Ltd',
-    phone: '9820011111',
+    phone: oraaniPhone,
     brand: 'ORAANI',
     category: 'Retailer',
     city: 'Panaji',
@@ -137,7 +140,7 @@ async function runTests() {
   }, {
     poc_name: 'AI925 Test Customer',
     company_name: 'Aryan Gems',
-    phone: '9820022222',
+    phone: aiPhone,
     brand: 'AI925',
     category: 'Wholesaler',
     city: 'Mumbai',

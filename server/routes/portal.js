@@ -36,7 +36,8 @@ function sectionClosed(res, mode) {
 }
 
 function normalizePhone(raw) {
-  return String(raw || '').replace(/\D/g, '');
+  const digits = String(raw || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
 const newId = prefix => prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
@@ -99,14 +100,20 @@ router.post('/register', uploadIdCard.single('id_card'), (req, res) => {
   if (!fullName) return fail(400, 'Name is required');
   if (!ACCOUNT_TYPES.includes(accountType)) return fail(400, 'Choose Retailer, Wholesaler or Both');
   if (pinRaw && !pinCode) return fail(400, 'Enter a valid 6-digit PIN code');
-  if (phone.length < 10 || phone.length > 13) return fail(400, 'Enter a valid mobile number (10 digits)');
+  if (phone.length !== 10) return fail(400, 'Enter a valid 10-digit mobile number');
   if (!EMAIL_RE.test(email)) return fail(400, 'Enter a valid email address');
   if (!address) return fail(400, 'Address is required');
   if (password.length < 6) return fail(400, 'Password must be at least 6 characters');
 
-  const clash = db.prepare('SELECT phone, email FROM customer_accounts WHERE phone = ? OR LOWER(email) = ?').get(phone, email);
+  const clash = db.prepare(`
+    SELECT phone, email FROM customer_accounts 
+    WHERE phone = ? 
+       OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?
+       OR LOWER(email) = ?
+  `).get(phone, phone, email);
+
   if (clash) {
-    return fail(400, clash.phone === phone
+    return fail(400, (clash.phone === phone || clash.phone?.endsWith(phone))
       ? 'An account with this mobile number already exists. Please sign in.'
       : 'An account with this email already exists. Please sign in.');
   }

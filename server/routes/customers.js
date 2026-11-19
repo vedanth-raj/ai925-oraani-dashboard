@@ -48,6 +48,11 @@ function formatAdditionalPhones(phones) {
   return null;
 }
 
+function normalizePhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
 // GET /api/customers (Matching Customers List Screen Images 8, 9 with Sales Rep Isolation)
 router.get('/', authenticateToken, (req, res) => {
   const { search, brand } = req.query;
@@ -295,7 +300,27 @@ router.post('/', authenticateToken, (req, res) => {
     }
   }
 
-  const id = 'cust_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+  const cleanPhone = phone ? normalizePhone(phone) : '';
+  if (cleanPhone) {
+    if (cleanPhone.length < 10) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+    }
+    const existing = db.prepare(`
+      SELECT id, poc_name, company_name FROM customers 
+      WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?) AND is_archived = 0
+    `).get(cleanPhone, cleanPhone);
+
+    if (existing) {
+      return res.status(400).json({
+        error: `A customer with mobile number ${cleanPhone} already exists: "${existing.poc_name}" (${existing.company_name}). Each customer must have only one mobile number.`
+      });
+    }
+  }
+
+  const generatedId = cleanPhone ? 'cust_' + cleanPhone : 'cust_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+  const existingId = db.prepare('SELECT id FROM customers WHERE id = ?').get(generatedId);
+  const id = existingId ? 'cust_' + Date.now().toString(36) + '_' + (cleanPhone || 'id') : generatedId;
+
   const now = new Date().toISOString();
   const additionalPhonesJson = formatAdditionalPhones(additional_phones);
   const customerBrand = String(brand || '').toUpperCase() === 'ORAANI' ? 'ORAANI' : 'AI925';
@@ -310,7 +335,7 @@ router.post('/', authenticateToken, (req, res) => {
     id,
     poc_name.trim(),
     company_name.trim(),
-    phone || '',
+    cleanPhone || phone || '',
     alternate_phone || null,
     additionalPhonesJson,
     gstin ? gstin.trim().toUpperCase() : null,
@@ -442,6 +467,21 @@ router.put('/:id', authenticateToken, (req, res) => {
     }
   }
 
+  if (phone !== undefined && phone !== customer.phone) {
+    const cleanPhone = normalizePhone(phone);
+    if (cleanPhone && cleanPhone.length === 10) {
+      const clash = db.prepare(`
+        SELECT id, poc_name, company_name FROM customers 
+        WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?) AND id != ? AND is_archived = 0
+      `).get(cleanPhone, cleanPhone, id);
+      if (clash) {
+        return res.status(400).json({
+          error: `Another customer (${clash.poc_name}) already has mobile number ${cleanPhone}. Each customer must have a unique mobile number.`
+        });
+      }
+    }
+  }
+
   const now = new Date().toISOString();
   const nextRepEditCount = isRep ? ((customer.rep_edit_count || 0) + 1) : (customer.rep_edit_count || 0);
   const additionalPhonesJson = additional_phones !== undefined ? formatAdditionalPhones(additional_phones) : customer.additional_phones;
@@ -548,7 +588,7 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // DELETE /api/customers/:id
-// Admin: Permitted to delete (removes if no orders, or archives to preserve ledger integrity)
+// Admin: Permitted to delete completely. Removes portal accounts, approvals, order history, and frees phone number.
 // Sales Rep: Strictly forbidden (403)
 router.delete('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -564,21 +604,49 @@ router.delete('/:id', authenticateToken, (req, res) => {
     return res.status(404).json({ error: 'Customer not found' });
   }
 
-  const orderCount = db.prepare('SELECT COUNT(*) as count FROM orders WHERE customer_id = ?').get(id).count;
+  const cleanPhone = customer.phone ? normalizePhone(customer.phone) : '';
 
-  if (orderCount === 0) {
+  db.transaction(() => {
+    // 1. Delete all associated portal accounts and their child records
+    const accounts = db.prepare(`
+      SELECT id FROM customer_accounts 
+      WHERE customer_id = ? 
+         OR (phone != '' AND phone = ?)
+         OR (phone != '' AND phone LIKE ?)
+         OR (email != '' AND LOWER(email) = LOWER(?))
+    `).all(id, customer.phone || '', cleanPhone ? `%${cleanPhone}` : '', customer.email || '');
+
+    for (const acct of accounts) {
+      db.prepare('DELETE FROM stock_requests WHERE customer_account_id = ?').run(acct.id);
+      db.prepare('DELETE FROM call_bookings WHERE customer_account_id = ?').run(acct.id);
+      db.prepare('DELETE FROM customer_change_requests WHERE customer_account_id = ?').run(acct.id);
+      db.prepare('DELETE FROM customer_password_history WHERE customer_account_id = ?').run(acct.id);
+      db.prepare('DELETE FROM customer_accounts WHERE id = ?').run(acct.id);
+    }
+
+    // 2. Clear customer orders and all related order records
+    const orderIds = db.prepare('SELECT id FROM orders WHERE customer_id = ?').all(id).map(r => r.id);
+    for (const ordId of orderIds) {
+      db.prepare('DELETE FROM delivery_items WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_id = ?)').run(ordId);
+      db.prepare('DELETE FROM deliveries WHERE order_id = ?').run(ordId);
+      db.prepare('DELETE FROM payments WHERE order_id = ?').run(ordId);
+      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(ordId);
+    }
+    db.prepare('DELETE FROM orders WHERE customer_id = ?').run(id);
+
+    // 3. Delete customer record completely from customers table (and any duplicates matching this phone)
     db.prepare('DELETE FROM customers WHERE id = ?').run(id);
-  } else {
-    // Preserve order history linkage by archiving
-    db.prepare('UPDATE customers SET is_archived = 1, updated_at = ? WHERE id = ?').run(new Date().toISOString(), id);
-  }
+    if (cleanPhone) {
+      db.prepare("DELETE FROM customers WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?)").run(cleanPhone, cleanPhone);
+    }
+  })();
 
   logAudit(
     req.user.id,
     'DELETE_CUSTOMER',
     'customers',
     id,
-    `Deleted customer: ${customer.poc_name} (${customer.company_name}) [orders: ${orderCount}]`,
+    `Completely deleted customer: ${customer.poc_name} (${customer.company_name}) and wiped portal history`,
     req,
     customer,
     null
@@ -586,7 +654,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 
   res.json({
     success: true,
-    message: `Customer "${customer.poc_name}" (${customer.company_name}) deleted successfully.`
+    message: `Customer "${customer.poc_name}" (${customer.company_name}) deleted completely. Mobile number is now available for new sign-up.`
   });
 });
 

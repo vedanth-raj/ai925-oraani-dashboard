@@ -467,6 +467,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason })
     }),
+  deleteCustomerAccount: (id: string) =>
+    request<{ success: boolean; message: string }>(`/requests/customer-accounts/${id}`, { method: 'DELETE' }),
   markCustomerNotified: (id: string) =>
     request<{ account: any }>(`/requests/customer-accounts/${id}/notified`, { method: 'POST' }),
   getOnOrderRequests: (status = 'OPEN') =>

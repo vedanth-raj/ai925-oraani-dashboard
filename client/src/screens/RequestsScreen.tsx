@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Inbox, UserPlus, ClipboardList, Phone, Mail, MapPin, Check, X, MessageCircle,
-  Edit3, CheckCircle2, Clock, IdCard, ChevronRight, Loader2, UserCog, PhoneCall
+  Edit3, CheckCircle2, Clock, IdCard, ChevronRight, Loader2, UserCog, PhoneCall, Trash2
 } from 'lucide-react';
 import { ProfileChangesTab, CallBookingsTab } from './RequestsExtraTabs';
 import { api } from '../api';
@@ -174,6 +174,20 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
       flash(res.message);
     } catch (err: any) {
       alert(err.message || 'Could not save');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDeleteAccount = async (account: any) => {
+    if (!confirm(`Are you sure you want to completely delete customer "${account.full_name}" (${account.phone})?\n\nThis will wipe all customer history, approval records, orders, and portal accounts, allowing them to sign up fresh as a new customer.`)) return;
+    setBusyId(account.id);
+    try {
+      await api.deleteCustomerAccount(account.id);
+      flash(`Customer "${account.full_name}" deleted completely.`);
+      await load();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete customer account');
     } finally {
       setBusyId(null);
     }
@@ -470,33 +484,55 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
                     )}
 
                     {a.status === 'APPROVED' ? (
-                      <button
-                        onClick={async () => {
-                          sendApprovalWhatsApp(a);
-                          await api.markCustomerNotified(a.id).catch(() => {});
-                          load();
-                        }}
-                        className="w-full mt-3 py-2.5 bg-[#25D366] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-                      >
-                        <MessageCircle size={14} /> {a.notified_at ? `Notified ${fmtDate(a.notified_at)} · Send again` : 'Notify customer on WhatsApp'}
-                      </button>
+                      <div className="space-y-2 mt-3">
+                        <button
+                          onClick={async () => {
+                            sendApprovalWhatsApp(a);
+                            await api.markCustomerNotified(a.id).catch(() => {});
+                            load();
+                          }}
+                          className="w-full py-2.5 bg-[#25D366] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          <MessageCircle size={14} /> {a.notified_at ? `Notified ${fmtDate(a.notified_at)} · Send again` : 'Notify customer on WhatsApp'}
+                        </button>
+                        {isAdmin && (
+                          <button
+                            disabled={busyId === a.id}
+                            onClick={() => handleDeleteAccount(a)}
+                            className="w-full py-2 bg-transparent text-[#A34343] hover:bg-[#FBE9E9] border border-[#A34343]/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Trash2 size={13} /> Delete & Reset (wipe history, allow re-signup)
+                          </button>
+                        )}
+                      </div>
                     ) : (
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          disabled={busyId === a.id}
-                          onClick={() => setRejecting(a)}
-                          className="flex-1 py-2.5 bg-[#FBE9E9] border border-[#C94C4C]/30 text-[#C94C4C] rounded-xl text-xs font-bold flex items-center justify-center gap-1"
-                        >
-                          <X size={14} /> Reject
-                        </button>
-                        <button
-                          disabled={busyId === a.id || (iApproved && a.status === 'PENDING')}
-                          onClick={() => approve(a)}
-                          className="flex-[2] py-2.5 bg-[#4F7D5B] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1"
-                        >
-                          {busyId === a.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                          {iApproved && a.status === 'PENDING' ? `${myRoleLabel} approval done` : `Approve as ${myRoleLabel} Admin`}
-                        </button>
+                      <div className="space-y-2 mt-3">
+                        <div className="flex gap-2">
+                          <button
+                            disabled={busyId === a.id}
+                            onClick={() => setRejecting(a)}
+                            className="flex-1 py-2.5 bg-[#FBE9E9] border border-[#C94C4C]/30 text-[#C94C4C] rounded-xl text-xs font-bold flex items-center justify-center gap-1"
+                          >
+                            <X size={14} /> Reject
+                          </button>
+                          <button
+                            disabled={busyId === a.id || (iApproved && a.status === 'PENDING')}
+                            onClick={() => approve(a)}
+                            className="flex-[2] py-2.5 bg-[#4F7D5B] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1"
+                          >
+                            {busyId === a.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            {iApproved && a.status === 'PENDING' ? `${myRoleLabel} approval done` : `Approve as ${myRoleLabel} Admin`}
+                          </button>
+                        </div>
+                        {isAdmin && (
+                          <button
+                            disabled={busyId === a.id}
+                            onClick={() => handleDeleteAccount(a)}
+                            className="w-full py-2 bg-transparent text-[#A34343] hover:bg-[#FBE9E9] border border-[#A34343]/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Trash2 size={13} /> Delete & Reset (wipe history, allow re-signup)
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

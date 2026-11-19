@@ -20,6 +20,9 @@ async function runTests() {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
+    const testPhone = '9' + Math.floor(100000000 + Math.random() * 900000000);
+    const testPhoneEdited = '9' + Math.floor(100000000 + Math.random() * 900000000);
+
     console.log('--- TEST 1: Sales Rep creates a new customer ---');
     const createRes = await fetch(`${baseUrl}/api/customers`, {
       method: 'POST',
@@ -30,7 +33,7 @@ async function runTests() {
       body: JSON.stringify({
         poc_name: 'Test Customer Rep',
         company_name: 'Rep Jewelers Ltd',
-        phone: '9876543210',
+        phone: testPhone,
         city: 'Mumbai',
         state: 'Maharashtra',
         zone: 'West'
@@ -54,7 +57,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         poc_name: 'Test Customer Rep (Edited 1)',
-        phone: '9876543211'
+        phone: testPhoneEdited
       })
     });
     const repModify1Body = await repModify1Res.json();
@@ -97,6 +100,7 @@ async function runTests() {
     }
 
     console.log('\n--- TEST 5: Sales Rep attempts to modify an Admin-created customer (MUST BE REJECTED 403) ---');
+    const adminCustomerPhone = '9' + Math.floor(100000000 + Math.random() * 900000000);
     const adminCustomerRes = await fetch(`${baseUrl}/api/customers`, {
       method: 'POST',
       headers: {
@@ -106,7 +110,7 @@ async function runTests() {
       body: JSON.stringify({
         poc_name: 'Admin Exclusive Customer',
         company_name: 'Admin Exclusive Ltd',
-        phone: '9999988888',
+        phone: adminCustomerPhone,
         city: 'Delhi',
         state: 'Delhi',
         zone: 'North'

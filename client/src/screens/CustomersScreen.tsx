@@ -481,7 +481,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
               <p className="text-xs text-[#766B60] leading-relaxed">
                 Are you sure you want to delete{' '}
                 <span className="font-semibold text-[#2F2923]">{customerToDelete.poc_name}</span> ({customerToDelete.company_name})?
-                Existing order ledgers will be safely preserved in history.
+                This will completely wipe their approval record, order history, and free their mobile number so they can register fresh if needed.
               </p>
             </div>
 
