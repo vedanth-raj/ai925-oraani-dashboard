@@ -29,6 +29,8 @@ cloudflared.exe
 
 # Build output
 client/dist/
+android-build/
+*.idsig
 
 # OS / Editor / Agent files
 .DS_Store
