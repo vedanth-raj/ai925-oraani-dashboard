@@ -5,6 +5,7 @@ const { db } = require('../db/database');
 const { authenticateToken, requireAdminOrBusinessAdmin, requireAdmin, logAudit, isCustomerOnline } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const { encrypt, decrypt } = require('../utils/secrets');
+const { deleteCustomerCompletely } = require('../services/customerCascade');
 
 const newId = prefix => prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
 
@@ -219,33 +220,7 @@ router.delete('/customer-accounts/:id', (req, res) => {
     return res.status(404).json({ error: 'Customer account not found' });
   }
 
-  const cleanPhone = account.phone ? normalizePhone(account.phone) : '';
-
-  db.transaction(() => {
-    // 1. Delete all child records of this portal account
-    db.prepare('DELETE FROM stock_requests WHERE customer_account_id = ?').run(account.id);
-    db.prepare('DELETE FROM call_bookings WHERE customer_account_id = ?').run(account.id);
-    db.prepare('DELETE FROM customer_change_requests WHERE customer_account_id = ?').run(account.id);
-    db.prepare('DELETE FROM customer_password_history WHERE customer_account_id = ?').run(account.id);
-    db.prepare('DELETE FROM customer_accounts WHERE id = ?').run(account.id);
-
-    // 2. If linked to customer in customers table, wipe that customer too
-    const custId = account.customer_id;
-    if (custId) {
-      const orderIds = db.prepare('SELECT id FROM orders WHERE customer_id = ?').all(custId).map(r => r.id);
-      for (const ordId of orderIds) {
-        db.prepare('DELETE FROM delivery_items WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_id = ?)').run(ordId);
-        db.prepare('DELETE FROM deliveries WHERE order_id = ?').run(ordId);
-        db.prepare('DELETE FROM payments WHERE order_id = ?').run(ordId);
-        db.prepare('DELETE FROM order_items WHERE order_id = ?').run(ordId);
-      }
-      db.prepare('DELETE FROM orders WHERE customer_id = ?').run(custId);
-      db.prepare('DELETE FROM customers WHERE id = ?').run(custId);
-    }
-    if (cleanPhone) {
-      db.prepare("DELETE FROM customers WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?)").run(cleanPhone, cleanPhone);
-    }
-  })();
+  deleteCustomerCompletely({ customerAccountId: account.id, phone: account.phone, email: account.email });
 
   logAudit(req.user.id, 'DELETE_CUSTOMER_ACCOUNT', 'customer_accounts', account.id, `Completely deleted customer account ${account.full_name} (${account.phone}) and wiped approval history`, req);
 

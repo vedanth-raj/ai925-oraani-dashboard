@@ -4,6 +4,7 @@ const multer = require('multer');
 const { db } = require('../db/database');
 const { authenticateToken, logAudit, isCustomerOnline } = require('../middleware/auth');
 const { uploadsSubdir, storeUploadedFile, ensureNamed, imageFileFilter } = require('../utils/files');
+const { deleteCustomerCompletely } = require('../services/customerCascade');
 
 // Visiting cards are stored as "<Company Name>.jpg" ("<Company Name>-1.jpg", ... for more cards)
 const CARDS_DIR = uploadsSubdir('visiting_cards');
@@ -606,40 +607,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 
   const cleanPhone = customer.phone ? normalizePhone(customer.phone) : '';
 
-  db.transaction(() => {
-    // 1. Delete all associated portal accounts and their child records
-    const accounts = db.prepare(`
-      SELECT id FROM customer_accounts 
-      WHERE customer_id = ? 
-         OR (phone != '' AND phone = ?)
-         OR (phone != '' AND phone LIKE ?)
-         OR (email != '' AND LOWER(email) = LOWER(?))
-    `).all(id, customer.phone || '', cleanPhone ? `%${cleanPhone}` : '', customer.email || '');
-
-    for (const acct of accounts) {
-      db.prepare('DELETE FROM stock_requests WHERE customer_account_id = ?').run(acct.id);
-      db.prepare('DELETE FROM call_bookings WHERE customer_account_id = ?').run(acct.id);
-      db.prepare('DELETE FROM customer_change_requests WHERE customer_account_id = ?').run(acct.id);
-      db.prepare('DELETE FROM customer_password_history WHERE customer_account_id = ?').run(acct.id);
-      db.prepare('DELETE FROM customer_accounts WHERE id = ?').run(acct.id);
-    }
-
-    // 2. Clear customer orders and all related order records
-    const orderIds = db.prepare('SELECT id FROM orders WHERE customer_id = ?').all(id).map(r => r.id);
-    for (const ordId of orderIds) {
-      db.prepare('DELETE FROM delivery_items WHERE delivery_id IN (SELECT id FROM deliveries WHERE order_id = ?)').run(ordId);
-      db.prepare('DELETE FROM deliveries WHERE order_id = ?').run(ordId);
-      db.prepare('DELETE FROM payments WHERE order_id = ?').run(ordId);
-      db.prepare('DELETE FROM order_items WHERE order_id = ?').run(ordId);
-    }
-    db.prepare('DELETE FROM orders WHERE customer_id = ?').run(id);
-
-    // 3. Delete customer record completely from customers table (and any duplicates matching this phone)
-    db.prepare('DELETE FROM customers WHERE id = ?').run(id);
-    if (cleanPhone) {
-      db.prepare("DELETE FROM customers WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?)").run(cleanPhone, cleanPhone);
-    }
-  })();
+  deleteCustomerCompletely({ customerId: id, phone: customer.phone, email: customer.email });
 
   logAudit(
     req.user.id,

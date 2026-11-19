@@ -94,6 +94,7 @@ export function detectBrand(): Brand {
 
 export function setActiveBrand(brand: Brand): void {
   safeSetStorage(brand);
+  applyPwaBranding(brand);
 }
 
 export function getActiveBrand(): Brand {
@@ -103,4 +104,53 @@ export function getActiveBrand(): Brand {
 export function getBrandConfig(brand?: Brand): BrandConfig {
   const b = brand || getActiveBrand();
   return BRANDS[b] || BRANDS.AI925;
+}
+
+export function applyPwaBranding(brand?: Brand): void {
+  if (typeof document === 'undefined') return;
+  const b = brand || getActiveBrand();
+  const config = BRANDS[b] || BRANDS.AI925;
+
+  // 1. Update Title
+  document.title = b === 'ORAANI' ? 'Oraani' : 'AI925 Order Management System';
+
+  // 2. Update Manifest Link
+  let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+  if (!manifestLink) {
+    manifestLink = document.createElement('link');
+    manifestLink.rel = 'manifest';
+    document.head.appendChild(manifestLink);
+  }
+  manifestLink.href = b === 'ORAANI' ? '/oraani-manifest.json' : '/manifest.json';
+
+  // 3. Update Apple Touch Icons
+  const appleIcons = document.querySelectorAll('link[rel="apple-touch-icon"]');
+  const appleTouchHref = b === 'ORAANI' ? '/oraani-apple-touch-icon.png' : '/apple-touch-icon.png';
+  appleIcons.forEach(el => el.setAttribute('href', appleTouchHref));
+
+  // 4. Update Favicon / Shortcut Icons
+  const svgIcon = document.querySelector('link[type="image/svg+xml"]');
+  if (svgIcon) {
+    svgIcon.setAttribute('href', b === 'ORAANI' ? '/oraani-logo.svg' : '/icon.svg');
+  }
+
+  const icon192 = document.querySelector('link[sizes="192x192"]');
+  if (icon192) {
+    icon192.setAttribute('href', b === 'ORAANI' ? '/oraani-icon-192.png' : '/icon-192.png');
+  }
+
+  const icon512 = document.querySelector('link[sizes="512x512"]');
+  if (icon512) {
+    icon512.setAttribute('href', b === 'ORAANI' ? '/oraani-icon-512.png' : '/icon-512.png');
+  }
+
+  // 5. Update Web App Title Meta
+  const appTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (appTitle) {
+    appTitle.setAttribute('content', config.displayName);
+  }
+  const appName = document.querySelector('meta[name="application-name"]');
+  if (appName) {
+    appName.setAttribute('content', config.displayName);
+  }
 }

@@ -124,12 +124,33 @@ if (fs.existsSync(CLIENT_DIST)) {
       }
     }
   }));
+  // Route-specific manifest for Oraani PWA
+  app.get(['/oraani/manifest.json', '/oraani/manifest.webmanifest'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(CLIENT_DIST, 'oraani-manifest.json'));
+  });
+
   app.use((req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
       return next();
     }
     res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(CLIENT_DIST, 'index.html'));
+    const indexPath = path.join(CLIENT_DIST, 'index.html');
+    const isOraani = req.path.toLowerCase().startsWith('/oraani') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/oraani'));
+
+    if (isOraani && fs.existsSync(indexPath)) {
+      let html = fs.readFileSync(indexPath, 'utf8');
+      html = html
+        .replace(/<title>.*?<\/title>/, '<title>Oraani</title>')
+        .replace(/content="AI925"/g, 'content="Oraani"')
+        .replace(/href="\/manifest\.json"/g, 'href="/oraani-manifest.json"')
+        .replace(/href="\/icon\.svg"/g, 'href="/oraani-logo.svg"')
+        .replace(/href="\/icon-192\.png"/g, 'href="/oraani-icon-192.png"')
+        .replace(/href="\/icon-512\.png"/g, 'href="/oraani-icon-512.png"')
+        .replace(/href="\/apple-touch-icon\.png"/g, 'href="/oraani-apple-touch-icon.png"');
+      return res.type('html').send(html);
+    }
+    res.sendFile(indexPath);
   });
 }
 
