@@ -85,7 +85,7 @@ if not exist "%INSTALL_DIR%\.env" (
     (
         echo # AI925 Order Management System - Environment Configuration
         echo NGROK_AUTHTOKEN=3L6ahuT8juRgo9EGsKUkeBEdSpb_3oo2qqfmiacGwt6n2TMSN
-        echo NGROK_DOMAIN=vedanthdeviloper.ngrok-free.app
+        echo NGROK_DOMAIN=entangled-stem-cinema.ngrok-free.dev
         echo PORT=3000
         echo NODE_ENV=production
     ) > "%INSTALL_DIR%\.env"

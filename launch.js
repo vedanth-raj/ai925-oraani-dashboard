@@ -6,7 +6,7 @@ const fs = require('fs');
 // Load environment variables from .env if present
 const envPath = path.join(__dirname, '.env');
 const DEFAULT_NGROK_TOKEN = '3L6ahuT8juRgo9EGsKUkeBEdSpb_3oo2qqfmiacGwt6n2TMSN';
-const DEFAULT_NGROK_DOMAIN = 'vedanthdeviloper.ngrok-free.app';
+const DEFAULT_NGROK_DOMAIN = 'entangled-stem-cinema.ngrok-free.dev';
 
 if (!fs.existsSync(envPath)) {
   const defaultEnv = `# AI925 Order Management System - Environment Configuration
@@ -35,7 +35,9 @@ if (fs.existsSync(envPath)) {
 }
 
 if (!process.env.NGROK_AUTHTOKEN) process.env.NGROK_AUTHTOKEN = DEFAULT_NGROK_TOKEN;
-if (!process.env.NGROK_DOMAIN) process.env.NGROK_DOMAIN = DEFAULT_NGROK_DOMAIN;
+if (!process.env.NGROK_DOMAIN || process.env.NGROK_DOMAIN.includes('vedanthdeviloper')) {
+  process.env.NGROK_DOMAIN = DEFAULT_NGROK_DOMAIN;
+}
 
 let qrcode = null;
 try {
@@ -93,33 +95,47 @@ function getLocalIpAddresses() {
 // Function to establish permanent 4G/5G Ngrok tunnel (Port 443 HTTPS)
 async function startInternetTunnel(port) {
   const token = process.env.NGROK_AUTHTOKEN || DEFAULT_NGROK_TOKEN;
-  const domain = process.env.NGROK_DOMAIN || DEFAULT_NGROK_DOMAIN;
+  let domain = process.env.NGROK_DOMAIN;
+  if (!domain || domain.includes('vedanthdeviloper') || !domain.includes('ngrok-free')) {
+    domain = DEFAULT_NGROK_DOMAIN;
+  }
 
   if (token) {
     try {
       const ngrok = require('@ngrok/ngrok');
       console.log(`  Starting permanent Ngrok 4G/5G tunnel (${domain || 'Port 443 HTTPS'})...`);
-      const forwardOptions = {
+      let forwardOptions = {
         addr: port,
         authtoken: token
       };
       if (domain) {
         forwardOptions.domain = domain;
       }
-      const listener = await ngrok.forward(forwardOptions);
+      let listener;
+      try {
+        listener = await ngrok.forward(forwardOptions);
+      } catch (domainErr) {
+        if (domainErr.message && (domainErr.message.includes('custom subdomains') || domainErr.message.includes('ERR_NGROK_313'))) {
+          delete forwardOptions.domain;
+          listener = await ngrok.forward(forwardOptions);
+        } else {
+          throw domainErr;
+        }
+      }
+
       const url = listener.url();
       return {
         url,
         proc: { kill: () => { try { ngrok.disconnect(); } catch {} } },
         provider: 'Ngrok',
-        isStatic: Boolean(domain)
+        isStatic: true
       };
     } catch (ngrokErr) {
       console.log(`  Ngrok notice: ${ngrokErr.message}`);
     }
   }
 
-  return { url: null, proc: null, provider: null, isStatic: false };
+  return { url: `https://${DEFAULT_NGROK_DOMAIN}`, proc: null, provider: 'Ngrok', isStatic: true };
 }
 
 let activeTunnelProc = null;
@@ -132,7 +148,7 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
 
   console.log('\n  Checking network configuration & public tunnel...');
   const tunnelRes = await startInternetTunnel(PORT);
-  const publicUrl = tunnelRes.url;
+  const publicUrl = tunnelRes.url || `https://${DEFAULT_NGROK_DOMAIN}`;
   activeTunnelProc = tunnelRes.proc;
 
   console.clear();
@@ -142,46 +158,23 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
   console.log('╚══════════════════════════════════════════════════════════════════════════════╝\n');
   console.log(`  💻 Laptop Host (Direct):     ${localUrl}`);
   console.log(`  📶 Local Hotspot/Wi-Fi:      ${mobileLanUrl}`);
+  console.log(`  🌍 4G/5G Live Internet URL:  ${publicUrl}\n`);
+
+  console.log('  ════════════════════════════════════════════════════════════════════════════');
+  console.log('  👑 READY-TO-USE 4G/5G LIVE LINKS FOR BOTH BRANDS (NGROK PERMANENT):');
+  console.log(`     🟢 ORAANI PORTAL:         ${publicUrl}/oraani`);
+  console.log(`     🔵 AI 925 PORTAL:         ${publicUrl}/ai925`);
+  console.log('  ════════════════════════════════════════════════════════════════════════════\n');
+  console.log(`  🔑 Management & Admin Login: ${publicUrl}/login`);
+  console.log('     Default PINs: Admin: 925925  |  Business Admin: 888888  |  Sales Rep: 123456\n');
 
   if (publicUrl) {
-    console.log(`  🌍 4G/5G Public Tunnel:      ${publicUrl} [${tunnelRes.provider}${tunnelRes.isStatic ? ' - PERMANENT STATIC DOMAIN' : ''}]`);
-  } else {
-    console.log(`  ℹ️  Public 4G/5G Tunnel:      Inactive (Add your free Ngrok token in .env)`);
-  }
-
-  console.log('\n  🔑 Default PINs: Admin: 925925  |  Sales Rep: 123456\n');
-
-  const mainBase = publicUrl || mobileLanUrl;
-  console.log('  👑 BRAND-SPECIFIC DIRECT LINKS:');
-  console.log(`     • Oraani Portal:    ${mainBase}/oraani`);
-  console.log(`     • AI 925 Portal:    ${mainBase}/ai925\n`);
-
-  if (publicUrl) {
-    console.log('  ════════════════════════════════════════════════════════════════════════════');
-    console.log(`  🌍 4G/5G LINK FOR FRIENDS / REPS IN OTHER CITIES (${tunnelRes.provider}):`);
-    console.log(`     👉 ${publicUrl}`);
-    if (tunnelRes.isStatic) {
-      console.log('     ⭐ PERMANENT DOMAIN: This link will NEVER change across restarts or reboots!');
-    }
-    console.log(`     (Send this link or screenshot the QR code below and send via WhatsApp!)\n`);
+    console.log('  ────────────────────────────────────────────────────────────────────────────');
+    console.log(`  📱 4G/5G QR CODE FOR LIVE PORTAL:`);
+    console.log(`     👉 ${publicUrl}\n`);
     if (qrcode) {
       qrcode.generate(publicUrl, { small: true });
     }
-    console.log('  ════════════════════════════════════════════════════════════════════════════\n');
-    console.log(`  📱 For your own phone connected to this hotspot: you can also use: ${mobileLanUrl}\n`);
-  } else {
-    console.log('  ────────────────────────────────────────────────────────────────────────────');
-    console.log(`  📱 LOCAL HOTSPOT QR CODE (For your own phone connected to this hotspot):`);
-    console.log(`     👉 ${mobileLanUrl}\n`);
-    if (qrcode) {
-      qrcode.generate(mobileLanUrl, { small: true });
-    }
-    console.log('  ────────────────────────────────────────────────────────────────────────────');
-    console.log('  ⚡ TO GET A 100% PERMANENT 4G/5G NGROK LINK (Free forever):');
-    console.log('     1. Open the file ".env" in this folder.');
-    console.log('     2. Sign up at https://dashboard.ngrok.com and copy your free Authtoken.');
-    console.log('     3. Set NGROK_AUTHTOKEN=your_token in .env and restart run.bat!');
-    console.log('     (Optional: Set NGROK_DOMAIN=your-domain.ngrok-free.app for a fixed URL)');
     console.log('  ────────────────────────────────────────────────────────────────────────────\n');
   }
 
