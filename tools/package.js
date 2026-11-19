@@ -42,8 +42,11 @@ const itemsToInclude = [
   'package-lock.json',
   'run.bat',
   'update.bat',
+  'rollback.bat',
+  'INSTALL_AI925.bat',
   'package_zip.bat',
-  '.env',
+  'README.md',
+  '.env.example',
   '.gitignore',
   'Dockerfile',
   'render.yaml'

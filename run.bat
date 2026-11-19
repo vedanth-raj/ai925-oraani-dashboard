@@ -120,7 +120,13 @@ echo [OK] Everything is ready.
 echo.
 
 :: ---------------------------------------------------------------
-:: 5. Start the system launcher
+:: 5. Check for live cloud updates (Zero Data Loss)
+:: ---------------------------------------------------------------
+echo [INFO] Checking for live updates from cloud repository...
+node tools\sync.js check
+
+:: ---------------------------------------------------------------
+:: 6. Start the system launcher
 :: ---------------------------------------------------------------
 :start_server
 echo [INFO] Starting AI925 Server...

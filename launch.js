@@ -255,6 +255,27 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
 
   console.log('  Server active. Press Ctrl+C to stop.\n');
 
+  // Background live auto-update check every 15 minutes (with zero data loss)
+  try {
+    const sync = require('./tools/sync');
+    setInterval(async () => {
+      try {
+        const local = sync.getLocalVersion();
+        const remote = await sync.fetchRemoteCommit();
+        if (remote && local.sha !== remote.sha) {
+          console.log(`\n[LIVE AUTO-SYNC] New update detected: [${remote.sha.slice(0, 7)}] "${remote.message}"`);
+          console.log('[LIVE AUTO-SYNC] Applying update safely with automatic backup...');
+          const res = await sync.applyUpdate(remote);
+          if (res.success) {
+            console.log('[LIVE AUTO-SYNC] Update applied cleanly! Running latest version.\n');
+          }
+        }
+      } catch (e) {
+        // Silent catch so running server is never disrupted
+      }
+    }, 15 * 60 * 1000);
+  } catch {}
+
   // Open default browser on laptop host
   const startCmd = process.platform === 'win32' ? `start "" "${localUrl}"` :
                    process.platform === 'darwin' ? `open "${localUrl}"` :
