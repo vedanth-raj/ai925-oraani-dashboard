@@ -2,8 +2,9 @@
 node_modules/
 client/node_modules/
 
-# Local Database & Live User Data (Preserve during updates & protect data!)
+# Local Database & Live User Data (Preserve during updates & protect live customer data!)
 data/*.db
+!data/starter_catalog.db
 data/*.db-wal
 data/*.db-shm
 data/*.db-journal
@@ -12,9 +13,11 @@ data/backups/
 data/cloud_drive/
 !data/.gitkeep
 
-# Uploaded Files & Private Cloud Documents
+# Uploaded Files - Product catalog photos are included, customer docs are private
 uploads/*
 !uploads/.gitkeep
+!uploads/products/
+!uploads/products/*
 
 # Large Binaries & Zip Archives
 cloudflared.exe

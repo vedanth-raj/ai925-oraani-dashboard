@@ -9,6 +9,15 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 const DB_PATH = path.join(DATA_DIR, 'ai925.db');
+const STARTER_DB = path.join(DATA_DIR, 'starter_catalog.db');
+if (!fs.existsSync(DB_PATH) && fs.existsSync(STARTER_DB)) {
+  try {
+    fs.copyFileSync(STARTER_DB, DB_PATH);
+    console.log('[INFO] Fresh database initialized with starting product catalog and settings.');
+  } catch (copyErr) {
+    console.warn('[WARNING] Could not copy starter catalog:', copyErr.message);
+  }
+}
 const db = new Database(DB_PATH);
 
 // Configure SQLite for high performance and integrity
