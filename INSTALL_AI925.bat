@@ -55,7 +55,12 @@ mkdir "%TEMP_EXTRACT%"
 
 curl.exe -s -L "https://github.com/vedanth-raj/ai925-oraani-dashboard/archive/refs/heads/main.zip" -o "%TEMP_ZIP%"
 if not exist "%TEMP_ZIP%" (
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://github.com/vedanth-raj/ai925-oraani-dashboard/archive/refs/heads/main.zip' -OutFile '%TEMP_ZIP%'"
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/vedanth-raj/ai925-oraani-dashboard/archive/refs/heads/main.zip' -OutFile '%TEMP_ZIP%'"
+) else (
+    for %%F in ("%TEMP_ZIP%") do if %%~zF LSS 1000 (
+        del "%TEMP_ZIP%"
+        powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/vedanth-raj/ai925-oraani-dashboard/archive/refs/heads/main.zip' -OutFile '%TEMP_ZIP%'"
+    )
 )
 
 tar.exe -xf "%TEMP_ZIP%" -C "%TEMP_EXTRACT%"
