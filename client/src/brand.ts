@@ -38,44 +38,52 @@ export const BRANDS: Record<Brand, BrandConfig> = {
 
 const STORAGE_KEY = 'ai925_active_brand';
 
+function safeSetStorage(val: Brand): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_KEY, val);
+    }
+  } catch {}
+}
+
+function safeGetStorage(): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(STORAGE_KEY);
+    }
+  } catch {}
+  return null;
+}
+
 /**
- * Detect the current active brand from URL path, query params, hostname, or localStorage.
+ * Detect the current active brand from URL path, query params, hash, hostname, or localStorage.
  */
 export function detectBrand(): Brand {
   if (typeof window === 'undefined') return 'AI925';
 
-  const path = window.location.pathname.toLowerCase();
-  const search = window.location.search.toLowerCase();
-  const host = window.location.hostname.toLowerCase();
+  const path = (window.location.pathname || '').toLowerCase();
+  const search = (window.location.search || '').toLowerCase();
+  const hash = (window.location.hash || '').toLowerCase();
+  const host = (window.location.hostname || '').toLowerCase();
 
-  // 1. Path-based detection (/oraani vs /ai925)
-  if (path.startsWith('/oraani')) {
-    localStorage.setItem(STORAGE_KEY, 'ORAANI');
+  // 1. Explicit path-based detection (/oraani vs /ai925)
+  if (path.includes('oraani') || hash.includes('oraani') || search.includes('oraani')) {
+    safeSetStorage('ORAANI');
     return 'ORAANI';
   }
-  if (path.startsWith('/ai925')) {
-    localStorage.setItem(STORAGE_KEY, 'AI925');
+  if (path.includes('ai925') || hash.includes('ai925') || search.includes('ai925')) {
+    safeSetStorage('AI925');
     return 'AI925';
   }
 
-  // 2. Query param detection (?brand=oraani)
-  if (search.includes('brand=oraani')) {
-    localStorage.setItem(STORAGE_KEY, 'ORAANI');
-    return 'ORAANI';
-  }
-  if (search.includes('brand=ai925')) {
-    localStorage.setItem(STORAGE_KEY, 'AI925');
-    return 'AI925';
-  }
-
-  // 3. Domain / Hostname detection (e.g. oraani.com, oraani.local, oraani-portal)
+  // 2. Domain / Hostname detection (e.g. oraani.com, oraani.local, oraani-portal)
   if (host.includes('oraani')) {
-    localStorage.setItem(STORAGE_KEY, 'ORAANI');
+    safeSetStorage('ORAANI');
     return 'ORAANI';
   }
 
-  // 4. Stored preference
-  const stored = localStorage.getItem(STORAGE_KEY);
+  // 3. Stored preference
+  const stored = safeGetStorage();
   if (stored === 'ORAANI' || stored === 'AI925') {
     return stored as Brand;
   }
@@ -85,9 +93,7 @@ export function detectBrand(): Brand {
 }
 
 export function setActiveBrand(brand: Brand): void {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, brand);
-  }
+  safeSetStorage(brand);
 }
 
 export function getActiveBrand(): Brand {

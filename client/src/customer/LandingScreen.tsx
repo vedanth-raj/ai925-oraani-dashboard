@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { LogIn, UserPlus, Briefcase } from 'lucide-react';
-import { getBrandConfig, getActiveBrand } from '../brand';
+import { getBrandConfig, getActiveBrand, type Brand } from '../brand';
 
 interface LandingScreenProps {
   onSignIn: () => void;
@@ -10,7 +10,16 @@ interface LandingScreenProps {
 
 // Logo only, with the sign-in buttons below it (Standalone per brand link)
 export const LandingScreen: React.FC<LandingScreenProps> = ({ onSignIn, onSignUp, onStaffLogin }) => {
-  const brandConfig = getBrandConfig(getActiveBrand());
+  const [brand, setBrand] = useState<Brand>(getActiveBrand);
+
+  useEffect(() => {
+    setBrand(getActiveBrand());
+    const handlePopState = () => setBrand(getActiveBrand());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const brandConfig = getBrandConfig(brand);
 
   return (
     <div className="min-h-screen bg-[#F5F0E8] flex flex-col max-w-lg mx-auto px-5 py-8">

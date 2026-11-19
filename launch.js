@@ -180,10 +180,10 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
 
   console.log('  Server active. Press Ctrl+C to stop.\n');
 
-  // Background live auto-update check every 15 minutes (with zero data loss)
+  // Background live auto-update check (checks immediately, then every 60 seconds with zero data loss)
   try {
     const sync = require('./tools/sync');
-    setInterval(async () => {
+    const checkAndSync = async () => {
       try {
         const local = sync.getLocalVersion();
         const remote = await sync.fetchRemoteCommit();
@@ -198,7 +198,12 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
       } catch (e) {
         // Silent catch so running server is never disrupted
       }
-    }, 15 * 60 * 1000);
+    };
+
+    // First check after 3 seconds
+    setTimeout(checkAndSync, 3000);
+    // Ongoing check every 60 seconds
+    setInterval(checkAndSync, 60 * 1000);
   } catch {}
 
   // Open default browser on laptop host

@@ -156,7 +156,15 @@ async function applyUpdate(remoteCommit) {
       const tempZip = path.join(DATA_DIR, 'temp_update.zip');
       const tempExtract = path.join(DATA_DIR, 'temp_extract');
 
-      execSync(`curl.exe -s -L "${zipUrl}" -o "${tempZip}"`, { cwd: ROOT_DIR });
+      if (fs.existsSync(tempZip)) fs.unlinkSync(tempZip);
+      try {
+        execSync(`curl.exe -s -L "${zipUrl}" -o "${tempZip}"`, { cwd: ROOT_DIR });
+      } catch {}
+
+      if (!fs.existsSync(tempZip) || fs.statSync(tempZip).size < 1000) {
+        if (fs.existsSync(tempZip)) fs.unlinkSync(tempZip);
+        execSync(`powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${zipUrl}' -OutFile '${tempZip}'"`, { cwd: ROOT_DIR });
+      }
 
       if (fs.existsSync(tempExtract)) fs.rmSync(tempExtract, { recursive: true, force: true });
       fs.mkdirSync(tempExtract, { recursive: true });
