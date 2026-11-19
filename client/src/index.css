@@ -96,6 +96,34 @@ body {
   -webkit-touch-callout: none !important;
 }
 
+/* Banking app style black screen on screenshot / blur / app switch */
+body.screen-blackout,
+body.screen-blackout #root,
+body.screen-blackout * {
+  background: #000000 !important;
+  color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  user-select: none !important;
+}
+
+body.screen-blackout::after {
+  content: "Security Policy: Screen capture restricted";
+  position: fixed;
+  inset: 0;
+  background: #000000 !important;
+  color: #666666 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 2147483647;
+}
+
 @media print {
   html, body, #root, * {
     display: none !important;

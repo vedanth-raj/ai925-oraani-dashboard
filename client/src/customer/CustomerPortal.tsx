@@ -206,12 +206,40 @@ export const CustomerPortal: React.FC = () => {
       e.preventDefault();
     };
 
+    const handleBlackout = () => {
+      document.body.classList.add('screen-blackout');
+    };
+
+    const handleRestore = () => {
+      setTimeout(() => {
+        document.body.classList.remove('screen-blackout');
+      }, 500);
+    };
+
     const triggerWarning = () => {
+      handleBlackout();
       setScreenshotBlocked(true);
       try {
         navigator.clipboard?.writeText?.('Screenshots and content copying are restricted on this portal.');
       } catch {}
+      handleRestore();
       setTimeout(() => setScreenshotBlocked(false), 3500);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden || document.visibilityState === 'hidden') {
+        handleBlackout();
+      } else {
+        handleRestore();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      handleBlackout();
+    };
+
+    const handleWindowFocus = () => {
+      handleRestore();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -244,11 +272,20 @@ export const CustomerPortal: React.FC = () => {
     window.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('pagehide', handleBlackout);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('pagehide', handleBlackout);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.body.classList.remove('screen-blackout');
     };
   }, []);
 
