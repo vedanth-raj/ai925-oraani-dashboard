@@ -1,6 +1,6 @@
 import React from 'react';
 import { LogIn, UserPlus, Briefcase } from 'lucide-react';
-import { getBrandConfig, getActiveBrand, setActiveBrand, type Brand } from '../brand';
+import { getBrandConfig, getActiveBrand } from '../brand';
 
 interface LandingScreenProps {
   onSignIn: () => void;
@@ -8,42 +8,12 @@ interface LandingScreenProps {
   onStaffLogin: () => void;
 }
 
-// Logo only, with the sign-in buttons below it
+// Logo only, with the sign-in buttons below it (Standalone per brand link)
 export const LandingScreen: React.FC<LandingScreenProps> = ({ onSignIn, onSignUp, onStaffLogin }) => {
-  const [currentBrand, setCurrentBrand] = React.useState<Brand>(getActiveBrand());
-  const brandConfig = getBrandConfig(currentBrand);
-
-  const handleSwitchBrand = (newBrand: Brand) => {
-    setActiveBrand(newBrand);
-    setCurrentBrand(newBrand);
-    // Update URL query or path nicely without full page reload
-    if (window.history && window.history.replaceState) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('brand', newBrand.toLowerCase());
-      window.history.replaceState({}, '', url.toString());
-    }
-  };
+  const brandConfig = getBrandConfig(getActiveBrand());
 
   return (
     <div className="min-h-screen bg-[#F5F0E8] flex flex-col max-w-lg mx-auto px-5 py-8">
-      {/* Brand Selector Pill */}
-      <div className="flex justify-center mb-6">
-        <div className="inline-flex bg-[#E8DCCB] p-1 rounded-full text-xs font-semibold">
-          <button
-            onClick={() => handleSwitchBrand('AI925')}
-            className={`px-3 py-1 rounded-full transition-all ${currentBrand === 'AI925' ? 'bg-[#6B5744] text-[#FFFCF7] shadow-xs' : 'text-[#766B60] hover:text-[#2F2923]'}`}
-          >
-            AI 925
-          </button>
-          <button
-            onClick={() => handleSwitchBrand('ORAANI')}
-            className={`px-3 py-1 rounded-full transition-all ${currentBrand === 'ORAANI' ? 'bg-[#6B5744] text-[#FFFCF7] shadow-xs' : 'text-[#766B60] hover:text-[#2F2923]'}`}
-          >
-            Oraani
-          </button>
-        </div>
-      </div>
-
       <div className="flex-1 flex flex-col items-center justify-center text-center">
         <img
           src={brandConfig.logoUrl}
@@ -58,18 +28,26 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onSignIn, onSignUp
           >
             <LogIn size={18} /> Sign In to {brandConfig.displayName}
           </button>
+
           <button
             onClick={onSignUp}
-            className="w-full py-3.5 bg-[#FFFCF7] border border-[#6B5744] text-[#6B5744] font-bold rounded-2xl flex items-center justify-center gap-2"
+            className="w-full py-3.5 bg-white hover:bg-[#FAF6F0] text-[#2F2923] border border-[#D2BFA7] font-semibold rounded-2xl flex items-center justify-center gap-2 shadow-xs"
           >
-            <UserPlus size={18} /> Create a new {brandConfig.displayName} account
+            <UserPlus size={18} /> Apply for New Account
           </button>
         </div>
       </div>
 
-      <button onClick={onStaffLogin} className="mt-8 mx-auto flex items-center gap-1.5 text-xs font-semibold text-[#766B60] hover:text-[#2F2923]">
-        <Briefcase size={14} /> Staff login
-      </button>
+      {/* Subtle staff login footer */}
+      <div className="mt-8 pt-4 border-t border-[#D2BFA7]/40 text-center">
+        <button
+          onClick={onStaffLogin}
+          className="text-xs text-[#766B60] hover:text-[#2F2923] flex items-center justify-center gap-1.5 mx-auto font-medium"
+        >
+          <Briefcase size={13} />
+          Internal Staff Login
+        </button>
+      </div>
     </div>
   );
 };
