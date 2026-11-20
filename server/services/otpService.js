@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db/database');
 const { sendOtpEmail } = require('./mailer');
+const { sendOtpSms } = require('./smsService');
 
 const OTP_EXPIRY_MINUTES = 5;
 const MIN_RESEND_SECONDS = 30;
@@ -56,25 +57,31 @@ async function generateAndSendOtp({ destination, purpose = 'LOGIN', brand = 'AI9
     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
   `).run(id, dest, otpHash, otp, purpose, MAX_ATTEMPTS, expiresAt, nowIso);
 
-  // Dispatch email if destination is an email
-  let mailResult = { sent: false };
+  // Dispatch via Email or Mobile SMS based on destination
+  let dispatchResult = { sent: false };
   if (dest.includes('@')) {
-    mailResult = await sendOtpEmail({
+    dispatchResult = await sendOtpEmail({
       to: dest,
       otp,
       brand,
       purpose: purpose === 'LOGIN' ? 'sign-in' : 'registration'
     });
   } else {
-    // For mobile numbers, log in console
-    console.log(`[OTP SMS Simulation] Mobile ${dest} -> Code: ${otp}`);
+    // For mobile numbers, send via live SMS Gateway (Fast2SMS / 2Factor)
+    dispatchResult = await sendOtpSms({
+      mobile: dest,
+      otp,
+      brand
+    });
   }
 
   return {
     ok: true,
-    message: dest.includes('@') ? `Verification code sent to ${dest}` : `Verification code generated for ${dest}`,
+    message: dest.includes('@')
+      ? `Verification code sent to email ${dest}`
+      : `Verification code sent to mobile ${dest}`,
     expires_in_seconds: OTP_EXPIRY_MINUTES * 60,
-    dev_otp: mailResult.dev_otp || otp
+    dev_otp: dispatchResult.dev_otp || otp
   };
 }
 

@@ -29,8 +29,8 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   const activeBrand = getActiveBrand();
   const brandConfig = getBrandConfig(activeBrand);
 
-  // Sign In tabs: Password or OTP
-  const [authMethod, setAuthMethod] = useState<'password' | 'otp'>('password');
+  // Sign In tabs: OTP (default) or Password
+  const [authMethod, setAuthMethod] = useState<'password' | 'otp'>('otp');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
