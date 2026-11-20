@@ -786,6 +786,20 @@ function initializeSchema() {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS customer_otps (
+        id TEXT PRIMARY KEY,
+        destination TEXT NOT NULL,
+        otp_hash TEXT NOT NULL,
+        otp_plain TEXT,
+        purpose TEXT NOT NULL DEFAULT 'LOGIN',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 5,
+        expires_at TEXT NOT NULL,
+        verified_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_customer_otps_lookup ON customer_otps(destination, purpose, expires_at);
     `);
 
     // Seed default weight slab discounts if table is empty

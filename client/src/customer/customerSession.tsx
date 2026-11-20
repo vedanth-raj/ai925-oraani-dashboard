@@ -7,6 +7,7 @@ interface CustomerSessionState {
   token: string | null;
   account: CustomerAccount | null;
   signIn: (identifier: string, password: string, rememberMe?: boolean) => Promise<void>;
+  signInWithOtp: (destination: string, otp: string, rememberMe?: boolean) => Promise<void>;
   register: (form: FormData) => Promise<void>;
   refresh: () => Promise<CustomerAccount | null>;
   signOut: () => void;
@@ -67,6 +68,13 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
     setAccount(res.account);
   }, []);
 
+  const signInWithOtp = useCallback(async (destination: string, otp: string, rememberMe = false) => {
+    const res = await portalApi.loginWithOtp({ destination, otp });
+    storeToken(res.token, rememberMe);
+    setToken(res.token);
+    setAccount(res.account);
+  }, []);
+
   const register = useCallback(async (form: FormData) => {
     const res = await portalApi.register(form);
     storeToken(res.token);
@@ -75,7 +83,7 @@ export function CustomerSessionProvider({ children }: { children: React.ReactNod
   }, []);
 
   return (
-    <CustomerSessionContext.Provider value={{ ready, token, account, signIn, register, refresh, signOut }}>
+    <CustomerSessionContext.Provider value={{ ready, token, account, signIn, signInWithOtp, register, refresh, signOut }}>
       {children}
     </CustomerSessionContext.Provider>
   );

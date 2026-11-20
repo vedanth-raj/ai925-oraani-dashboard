@@ -328,6 +328,42 @@ console.log('TEST 7: Version Rollback History Listing...');
   console.log('  [PASS] Rollback version listing operates cleanly without cmd.exe errors.\n');
 }
 
-console.log('====================================================');
-console.log('   ALL COMPREHENSIVE VERIFICATION TESTS PASSED!     ');
-console.log('====================================================');
+// -------------------------------------------------------------------
+// TEST 8: SERVER-SIDE OTP AUTHENTICATION & PINCODE STATE AUTO-FETCH
+// -------------------------------------------------------------------
+console.log('TEST 8: Server-Side OTP Authentication & Pincode State Auto-Fetch...');
+(async () => {
+  const { lookupPincode } = require('../server/services/pincodeService');
+  const { generateAndSendOtp, verifyOtp } = require('../server/services/otpService');
+
+  // Test 8A: Pincode lookup detects Goa for 403xxx
+  const pinGoa = await lookupPincode('403001');
+  assert(pinGoa && pinGoa.state === 'Goa', 'Pincode 403001 must resolve to Goa');
+
+  // Test 8B: Pincode lookup detects Delhi for 110001
+  const pinDelhi = await lookupPincode('110001');
+  assert(pinDelhi && pinDelhi.state === 'Delhi', 'Pincode 110001 must resolve to Delhi');
+
+  // Test 8C: OTP Generation & Dispatch
+  const testEmail = 'otp_test_' + Date.now() + '@example.com';
+  const genRes = await generateAndSendOtp({ destination: testEmail, purpose: 'LOGIN', brand: 'ORAANI' });
+  assert.strictEqual(genRes.ok, true, 'OTP generation must succeed');
+  assert(genRes.dev_otp && genRes.dev_otp.length === 6, 'OTP must be a 6-digit code');
+
+  // Test 8D: Invalid OTP check
+  const badCheck = verifyOtp({ destination: testEmail, otp: '999999', purpose: 'LOGIN' });
+  assert.strictEqual(badCheck.valid, false, 'Invalid OTP must fail verification');
+
+  // Test 8E: Valid OTP check
+  const goodCheck = verifyOtp({ destination: testEmail, otp: genRes.dev_otp, purpose: 'LOGIN' });
+  assert.strictEqual(goodCheck.valid, true, 'Valid OTP must succeed verification');
+
+  // Cleanup test OTP record
+  db.prepare('DELETE FROM customer_otps WHERE destination = ?').run(testEmail);
+
+  console.log('  [PASS] Server-side OTP authentication and pincode auto-state fetch verified successfully.\n');
+
+  console.log('====================================================');
+  console.log('   ALL COMPREHENSIVE VERIFICATION TESTS PASSED!     ');
+  console.log('====================================================');
+})();

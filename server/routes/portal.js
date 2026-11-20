@@ -18,6 +18,8 @@ const { buildPricedItems, sumPricing, insertOrder } = require('../services/order
 const { PAYMENT_METHODS, paymentOptions, payWithPlan } = require('../services/payments');
 const { customerPin, deliveryChargeFor, getPaymentTerms } = require('../services/commerce');
 const { encrypt } = require('../utils/secrets');
+const { generateAndSendOtp, verifyOtp } = require('../services/otpService');
+const { lookupPincode } = require('../services/pincodeService');
 
 const ID_CARDS_DIR = uploadsSubdir('id_cards');
 
@@ -169,6 +171,67 @@ router.post('/login', rateLimitLogin, (req, res) => {
   clearLoginAttempts(req.ip || req.connection?.remoteAddress);
   const account = publicAccount(row.id);
   res.json({ token: generateCustomerToken(account), account });
+});
+
+// POST /api/portal/otp/send { destination, purpose, brand }
+router.post('/otp/send', async (req, res) => {
+  try {
+    const { destination, purpose = 'LOGIN', brand } = req.body || {};
+    if (!destination) return res.status(400).json({ error: 'Mobile or email destination is required' });
+    const result = await generateAndSendOtp({ destination, purpose, brand });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to send OTP' });
+  }
+});
+
+// POST /api/portal/otp/verify { destination, otp, purpose }
+router.post('/otp/verify', (req, res) => {
+  const { destination, otp, purpose = 'LOGIN' } = req.body || {};
+  if (!destination || !otp) {
+    return res.status(400).json({ error: 'Destination and 6-digit code are required' });
+  }
+  const v = verifyOtp({ destination, otp, purpose });
+  if (!v.valid) {
+    return res.status(400).json({ error: v.error });
+  }
+  res.json({ ok: true, message: 'OTP verified successfully' });
+});
+
+// POST /api/portal/otp/login { destination, otp } (Sign in using verified OTP)
+router.post('/otp/login', rateLimitLogin, (req, res) => {
+  const { destination, otp } = req.body || {};
+  if (!destination || !otp) {
+    return res.status(400).json({ error: 'Destination and 6-digit code are required' });
+  }
+
+  const v = verifyOtp({ destination, otp, purpose: 'LOGIN' });
+  if (!v.valid) {
+    return res.status(400).json({ error: v.error });
+  }
+
+  const dest = String(destination).trim().toLowerCase();
+  const row = dest.includes('@')
+    ? db.prepare('SELECT * FROM customer_accounts WHERE LOWER(email) = ?').get(dest)
+    : db.prepare('SELECT * FROM customer_accounts WHERE phone = ?').get(normalizePhone(dest));
+
+  if (!row) {
+    return res.status(404).json({ error: 'No account found with this email or mobile. Please register first.' });
+  }
+
+  clearLoginAttempts(req.ip || req.connection?.remoteAddress);
+  const account = publicAccount(row.id);
+  res.json({ token: generateCustomerToken(account), account });
+});
+
+// GET /api/portal/pincode/:pincode (Public lookup for auto-filling State & City from PIN code)
+router.get('/pincode/:pincode', async (req, res) => {
+  const { pincode } = req.params;
+  const result = await lookupPincode(pincode);
+  if (!result || !result.state) {
+    return res.status(404).json({ error: 'PIN code not found' });
+  }
+  res.json(result);
 });
 
 // GET /api/portal/me (verification status lives here)

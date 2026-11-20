@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Eye, EyeOff, IdCard, Loader2, Trash2, Upload } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Check, Eye, EyeOff, IdCard, KeyRound, Loader2, Mail, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useCustomerSession } from './customerSession';
 import { compressImage } from '../utils/imageCompressor';
-import { ACCOUNT_TYPES, type AccountType } from '../api';
+import { ACCOUNT_TYPES, portalApi, type AccountType } from '../api';
 import { getBrandConfig, getActiveBrand } from '../brand';
 
 interface CustomerAuthScreenProps {
@@ -25,13 +25,24 @@ const INDIAN_STATES = [
 ];
 
 export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, onSwitchMode, onBack }) => {
-  const { signIn, register } = useCustomerSession();
+  const { signIn, signInWithOtp, register } = useCustomerSession();
   const activeBrand = getActiveBrand();
   const brandConfig = getBrandConfig(activeBrand);
+
+  // Sign In tabs: Password or OTP
+  const [authMethod, setAuthMethod] = useState<'password' | 'otp'>('password');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // OTP flow state
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
+
+  // Sign Up form state
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [phone, setPhone] = useState('');
@@ -39,14 +50,48 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   const [address, setAddress] = useState('');
   const [pinCode, setPinCode] = useState('');
   const [selectedState, setSelectedState] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinNotice, setPinNotice] = useState<string | null>(null);
+
   const [idCard, setIdCard] = useState<File | null>(null);
   const [idCardPreview, setIdCardPreview] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<AccountType | null>(null);
-  const [rememberMe, setRememberMe] = useState(false); // unticked by default
+  const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSignUp = mode === 'signup';
+
+  // Timer for OTP resend countdown
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCountdown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCountdown]);
+
+  // Automatic state detection when entering 6 digits of PIN code
+  const handlePinChange = async (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 6);
+    setPinCode(digits);
+    setPinNotice(null);
+
+    if (digits.length === 6) {
+      setPinLoading(true);
+      try {
+        const res = await portalApi.lookupPincode(digits);
+        if (res.state) {
+          setSelectedState(res.state);
+          setPinNotice(`Auto-fetched: ${res.state}${res.city ? ` (${res.city})` : ''}`);
+        }
+      } catch (err) {
+        // Fallback or manual selection continues
+      } finally {
+        setPinLoading(false);
+      }
+    }
+  };
 
   const handleIdCard = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,6 +99,30 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     const compressed = await compressImage(file);
     setIdCard(compressed);
     setIdCardPreview(URL.createObjectURL(compressed));
+  };
+
+  // Request OTP for sign in
+  const handleSendOtp = async () => {
+    const dest = identifier.trim();
+    if (!dest) {
+      setError('Please enter your mobile number or email');
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await portalApi.sendOtp({ destination: dest, purpose: 'LOGIN', brand: activeBrand });
+      setOtpSent(true);
+      setOtpCountdown(45);
+      setOtpNotice(res.message);
+      if (res.dev_otp) {
+        console.log(`[Developer / Testing OTP]: ${res.dev_otp}`);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Could not send verification code. Please check details.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -70,13 +139,9 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       if (pinCode.trim() && !/^\d{6}$/.test(pinCode.trim())) return setError('Please enter a valid 6-digit PIN code');
       if (password.length < 6) return setError('Password must be at least 6 characters');
       if (password !== confirm) return setError('Passwords do not match');
-    } else if (!identifier.trim() || !password) {
-      return setError('Enter your mobile number or email and password');
-    }
 
-    setBusy(true);
-    try {
-      if (isSignUp) {
+      setBusy(true);
+      try {
         const fd = new FormData();
         fd.append('full_name', fullName.trim());
         fd.append('company_name', companyName.trim());
@@ -90,11 +155,40 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         fd.append('brand', activeBrand);
         if (idCard) fd.append('id_card', idCard);
         await register(fd);
-      } else {
-        await signIn(identifier.trim(), password, rememberMe);
+      } catch (err: any) {
+        setError(err.message || 'Something went wrong. Please try again.');
+      } finally {
+        setBusy(false);
       }
+      return;
+    }
+
+    // Sign in flow: OTP or Password
+    if (authMethod === 'otp') {
+      if (!identifier.trim()) return setError('Please enter your mobile or email');
+      if (!otpCode.trim() || otpCode.trim().length !== 6) return setError('Please enter the 6-digit verification code');
+
+      setBusy(true);
+      try {
+        await signInWithOtp(identifier.trim(), otpCode.trim(), rememberMe);
+      } catch (err: any) {
+        setError(err.message || 'Invalid or expired verification code');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // Password sign in
+    if (!identifier.trim() || !password) {
+      return setError('Enter your mobile number or email and password');
+    }
+
+    setBusy(true);
+    try {
+      await signIn(identifier.trim(), password, rememberMe);
     } catch (err: any) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      setError(err.message || 'Invalid mobile/email or password');
     } finally {
       setBusy(false);
     }
@@ -120,10 +214,39 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         <p className="text-xs text-[#766B60] mb-5">
           {isSignUp
             ? 'Your profile will be verified by our team before you can buy.'
-            : 'Sign in with the mobile number or email you registered with.'}
+            : 'Sign in with your mobile, email, or one-time code.'}
         </p>
 
+        {/* Sign In Method Toggle: Password vs OTP */}
+        {!isSignUp && (
+          <div className="grid grid-cols-2 p-1 bg-[#F5F0E8] rounded-xl mb-4 border border-[#D2BFA7]">
+            <button
+              type="button"
+              onClick={() => { setAuthMethod('password'); setError(null); }}
+              className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                authMethod === 'password'
+                  ? 'bg-[#6B5744] text-white shadow-xs'
+                  : 'text-[#766B60] hover:text-[#2F2923]'
+              }`}
+            >
+              <KeyRound size={14} /> Password
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuthMethod('otp'); setError(null); }}
+              className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                authMethod === 'otp'
+                  ? 'bg-[#6B5744] text-white shadow-xs'
+                  : 'text-[#766B60] hover:text-[#2F2923]'
+              }`}
+            >
+              <ShieldCheck size={14} /> OTP Sign In
+            </button>
+          </div>
+        )}
+
         {error && <div className="mb-4 p-3 bg-[#FBE9E9] border border-[#C94C4C]/20 rounded-xl text-xs font-medium text-[#C94C4C]">{error}</div>}
+        {otpNotice && <div className="mb-4 p-3 bg-[#E3EEE6] border border-[#4F7D5B]/30 rounded-xl text-xs font-medium text-[#4F7D5B]">{otpNotice}</div>}
 
         <form onSubmit={submit} className="space-y-4" noValidate>
           {isSignUp ? (
@@ -174,8 +297,27 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={label} htmlFor="su-pin">PIN code <span className="normal-case font-semibold">(delivery)</span></label>
-                  <input id="su-pin" inputMode="numeric" maxLength={6} className={field} value={pinCode} onChange={e => setPinCode(e.target.value.replace(/\D/g, ''))} autoComplete="postal-code" placeholder="e.g. 400001" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold text-[#766B60] uppercase tracking-wider" htmlFor="su-pin">
+                      PIN code
+                    </label>
+                    {pinLoading && <Loader2 size={12} className="animate-spin text-[#6B5744]" />}
+                  </div>
+                  <input
+                    id="su-pin"
+                    inputMode="numeric"
+                    maxLength={6}
+                    className={field}
+                    value={pinCode}
+                    onChange={e => handlePinChange(e.target.value)}
+                    autoComplete="postal-code"
+                    placeholder="e.g. 403001"
+                  />
+                  {pinNotice && (
+                    <p className="text-[10px] text-[#4F7D5B] font-semibold mt-1 flex items-center gap-1">
+                      <Check size={12} /> {pinNotice}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className={label} htmlFor="su-state">State</label>
@@ -218,62 +360,130 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                   </label>
                 )}
               </div>
-            </>
-          ) : (
-            <div>
-              <label className={label} htmlFor="si-id">Mobile number or email</label>
-              <input id="si-id" className={field} value={identifier} onChange={e => setIdentifier(e.target.value)} autoCapitalize="none" autoComplete="username" placeholder="Mobile or email" />
-            </div>
-          )}
 
-          <div>
-            <label className={label} htmlFor="pw">Password {isSignUp && '*'}</label>
-            <div className="relative">
-              <input
-                id="pw"
-                type={showPassword ? 'text' : 'password'}
-                className={`${field} pr-10`}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                placeholder={isSignUp ? 'At least 6 characters' : 'Your password'}
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766B60] p-1" aria-label="Show password">
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+              <div>
+                <label className={label} htmlFor="pw">Password *</label>
+                <div className="relative">
+                  <input
+                    id="pw"
+                    type={showPassword ? 'text' : 'password'}
+                    className={`${field} pr-10`}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder="At least 6 characters"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766B60] p-1" aria-label="Show password">
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className={label} htmlFor="pw2">Confirm password *</label>
+                <input id="pw2" type={showPassword ? 'text' : 'password'} className={field} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
+              </div>
+            </>
+          ) : authMethod === 'otp' ? (
+            /* OTP Sign In Form */
+            <div className="space-y-3">
+              <div>
+                <label className={label} htmlFor="si-id-otp">Registered mobile or email</label>
+                <div className="flex gap-2">
+                  <input
+                    id="si-id-otp"
+                    className={field}
+                    value={identifier}
+                    onChange={e => { setIdentifier(e.target.value); setOtpSent(false); }}
+                    autoCapitalize="none"
+                    placeholder="e.g. yourname@mail.com"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={busy || otpCountdown > 0 || !identifier.trim()}
+                    className="px-4 py-2.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white font-bold text-xs rounded-xl shrink-0 transition-all shadow-xs flex items-center gap-1.5"
+                  >
+                    {busy && !otpSent ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                    {otpCountdown > 0 ? `${otpCountdown}s` : otpSent ? 'Resend' : 'Get OTP'}
+                  </button>
+                </div>
+              </div>
+
+              {otpSent && (
+                <div>
+                  <label className={label} htmlFor="si-otp-code">6-Digit Verification Code</label>
+                  <input
+                    id="si-otp-code"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoFocus
+                    className={`${field} text-center font-mono text-xl tracking-widest font-bold`}
+                    placeholder="······"
+                    value={otpCode}
+                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  />
+                  <p className="text-[11px] text-[#766B60] mt-1.5 text-center">
+                    Check your email inbox or spam folder for your 6-digit code.
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
-          {isSignUp && (
-            <div>
-              <label className={label} htmlFor="pw2">Confirm password *</label>
-              <input id="pw2" type={showPassword ? 'text' : 'password'} className={field} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
-            </div>
-          )}
-          {!isSignUp && (
-            <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={e => setRememberMe(e.target.checked)}
-                className="w-4 h-4 rounded border-[#D2BFA7] cursor-pointer accent-[#6B5744]"
-              />
-              <span className="text-xs font-medium text-[#766B60]">Remember me</span>
-            </label>
+          ) : (
+            /* Password Sign In Form */
+            <>
+              <div>
+                <label className={label} htmlFor="si-id">Mobile number or email</label>
+                <input id="si-id" className={field} value={identifier} onChange={e => setIdentifier(e.target.value)} autoCapitalize="none" autoComplete="username" placeholder="Mobile or email" />
+              </div>
+
+              <div>
+                <label className={label} htmlFor="pw">Password</label>
+                <div className="relative">
+                  <input
+                    id="pw"
+                    type={showPassword ? 'text' : 'password'}
+                    className={`${field} pr-10`}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    placeholder="Your password"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766B60] p-1" aria-label="Show password">
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-[#D2BFA7] cursor-pointer accent-[#6B5744]"
+                />
+                <span className="text-xs font-medium text-[#766B60]">Remember me</span>
+              </label>
+            </>
           )}
 
           <button
             type="submit"
-            disabled={busy}
-            className="w-full py-3.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+            disabled={busy || (!isSignUp && authMethod === 'otp' && (!otpSent || otpCode.length !== 6))}
+            className="w-full py-3.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
           >
             {busy && <Loader2 size={16} className="animate-spin" />}
-            {isSignUp ? 'Submit for verification' : 'Sign In'}
+            {isSignUp
+              ? 'Submit for verification'
+              : authMethod === 'otp'
+              ? 'Verify & Sign In'
+              : 'Sign In'}
           </button>
         </form>
 
         <p className="text-xs text-center text-[#766B60] mt-5">
           {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-          <button onClick={() => { setError(null); onSwitchMode(isSignUp ? 'signin' : 'signup'); }} className="font-bold text-[#6B5744]">
+          <button onClick={() => { setError(null); setOtpNotice(null); onSwitchMode(isSignUp ? 'signin' : 'signup'); }} className="font-bold text-[#6B5744]">
             {isSignUp ? 'Sign in' : 'Create one'}
           </button>
         </p>

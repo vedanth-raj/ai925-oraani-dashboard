@@ -634,6 +634,23 @@ async function portalRequest<T>(endpoint: string, options: RequestInit = {}): Pr
 }
 
 export const portalApi = {
+  lookupPincode: (pin: string) =>
+    portalRequest<{ city?: string; state?: string; district?: string }>(`/pincode/${pin}`),
+  sendOtp: (data: { destination: string; purpose?: string; brand?: string }) =>
+    portalRequest<{ ok: boolean; message: string; expires_in_seconds: number; dev_otp?: string }>('/otp/send', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  verifyOtp: (data: { destination: string; otp: string; purpose?: string }) =>
+    portalRequest<{ ok: boolean; message: string }>('/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  loginWithOtp: (data: { destination: string; otp: string }) =>
+    portalRequest<{ token: string; account: CustomerAccount }>('/otp/login', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
   register: (formData: FormData) =>
     portalRequest<{ token: string; account: CustomerAccount; message: string }>('/register', { method: 'POST', body: formData }),
   login: (identifier: string, password: string) =>
