@@ -70,17 +70,11 @@ function sendVia2Factor(apiKey, mobile, otp, brandName) {
 }
 
 /**
- * Dispatch live SMS via Fast2SMS Quick OTP API
+ * Dispatch live SMS via Fast2SMS Quick or OTP API
  */
-function sendViaFast2SMS(apiKey, mobile, otp) {
+function callFast2SMSApi(apiKey, payload) {
   return new Promise((resolve) => {
-    const cleanPhone = mobile.replace(/\D/g, '').slice(-10);
-    const postData = JSON.stringify({
-      route: 'otp',
-      variables_values: otp,
-      numbers: cleanPhone
-    });
-
+    const postData = JSON.stringify(payload);
     const options = {
       hostname: 'www.fast2sms.com',
       port: 443,
@@ -91,7 +85,7 @@ function sendViaFast2SMS(apiKey, mobile, otp) {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
       },
-      timeout: 6000
+      timeout: 8000
     };
 
     const req = https.request(options, (res) => {
@@ -103,7 +97,8 @@ function sendViaFast2SMS(apiKey, mobile, otp) {
           if (parsed.return === true) {
             resolve({ success: true, messageId: parsed.request_id });
           } else {
-            resolve({ success: false, error: (parsed.message && parsed.message[0]) || 'Fast2SMS error' });
+            const errMsg = (parsed.message && Array.isArray(parsed.message) ? parsed.message[0] : parsed.message) || 'Fast2SMS error';
+            resolve({ success: false, error: errMsg, statusCode: parsed.status_code });
           }
         } catch (e) {
           resolve({ success: false, error: 'Invalid response from Fast2SMS' });
@@ -120,6 +115,33 @@ function sendViaFast2SMS(apiKey, mobile, otp) {
     req.write(postData);
     req.end();
   });
+}
+
+async function sendViaFast2SMS(apiKey, mobile, otp, brandName = 'Oraani') {
+  const cleanPhone = mobile.replace(/\D/g, '').slice(-10);
+
+  // Attempt 1: Try Quick route 'q'
+  const qRes = await callFast2SMSApi(apiKey, {
+    route: 'q',
+    message: `Your ${brandName} verification code is ${otp}. Valid for 5 minutes.`,
+    language: 'english',
+    flash: 0,
+    numbers: cleanPhone
+  });
+
+  if (qRes.success) return qRes;
+
+  // Attempt 2: Try OTP route 'otp'
+  const otpRes = await callFast2SMSApi(apiKey, {
+    route: 'otp',
+    variables_values: otp,
+    numbers: cleanPhone
+  });
+
+  if (otpRes.success) return otpRes;
+
+  const errorMsg = qRes.error || otpRes.error || 'Fast2SMS delivery failed';
+  return { success: false, error: errorMsg, qError: qRes.error, otpError: otpRes.error };
 }
 
 /**
@@ -152,7 +174,7 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
   if (config.provider === '2factor') {
     result = await sendVia2Factor(config.apiKey, cleanPhone, otp, brandName);
   } else {
-    result = await sendViaFast2SMS(config.apiKey, cleanPhone, otp);
+    result = await sendViaFast2SMS(config.apiKey, cleanPhone, otp, brandName);
   }
 
   if (result.success) {

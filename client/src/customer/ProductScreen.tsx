@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Minus, Plus, ShoppingBag, Send, CheckCircle2, Loader2, PackageX, Trash2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, ShoppingBag, Send, CheckCircle2, Loader2, PackageX, Trash2, AlertCircle, Scale } from 'lucide-react';
 import { portalApi, type CatalogProduct, type SilverRate } from '../api';
 import { useCustomerSession } from './customerSession';
 import { PriceBreakdown } from '../components/PriceBreakdown';
@@ -69,6 +69,8 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
   const [stagedSize, setStagedSize] = useState<number>(20);
   const [stagedStd, setStagedStd] = useState<number>(20);
   const [stagingPieces, setStagingPieces] = useState('1');
+  const [stagingWeight, setStagingWeight] = useState('');
+  const [lastChanged, setLastChanged] = useState<'pieces' | 'weight'>('pieces');
   const [qtyError, setQtyError] = useState<string | null>(null);
 
   // Pieces Container: empty until the customer adds from the section above
@@ -99,7 +101,12 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
         const std = weightsForSize[0] ?? weights[0] ?? p.std_weight_per_20in ?? 20;
         const sizes = sizeChoices(p, mode, std);
         setStagedStd(std);
-        setStagedSize(picked ?? (sizes.some(v => sameNum(v, 20)) ? 20 : sizes[0] ?? 20));
+        const finalSize = picked ?? (sizes.some(v => sameNum(v, 20)) ? 20 : sizes[0] ?? 20);
+        setStagedSize(finalSize);
+        const initPw = unitWeightFor(p.sizes, p.std_weight_per_20in, finalSize, std);
+        setStagingPieces('1');
+        setStagingWeight(initPw > 0 ? parseFloat(initPw.toFixed(2)).toString() : '');
+        setLastChanged('pieces');
         setRows([]);
         setRowInputs({});
       })
@@ -170,21 +177,107 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
   const anyShort = priced.some(p => p.short);
   const labours = Array.from(new Set(priced.map(p => p.labour)));
 
+  const syncWeightAndPieces = (std: number, size: number, currentLastChanged = lastChanged) => {
+    const pw = unitWeightFor(product.sizes, product.std_weight_per_20in, size, std);
+    if (pw <= 0) return;
+    if (currentLastChanged === 'weight' && parseFloat(stagingWeight) > 0) {
+      const targetW = parseFloat(stagingWeight);
+      const calcPieces = Math.max(1, Math.round(targetW / pw));
+      const cap = isReady ? Math.max(1, leftFor(std, size)) : 9999;
+      setStagingPieces(String(Math.min(cap, calcPieces)));
+    } else {
+      const pcs = stagedQty();
+      setStagingWeight(parseFloat((pcs * pw).toFixed(2)).toString());
+    }
+  };
+
   // Weight first: keep the size when that weight offers it (Ready Stock: with pieces left), else its first size
   const chooseWeight = (w: number) => {
     setStagedStd(w);
     setQtyError(null);
     const sizes = sizeChoices(product, mode, w);
     const keeps = sizes.some(v => sameNum(v, stagedSize)) && (!isReady || leftFor(w, stagedSize) > 0);
-    if (!keeps && sizes.length > 0) setStagedSize((isReady ? sizes.find(v => leftFor(w, v) > 0) : undefined) ?? sizes[0]);
+    const nextSize = keeps ? stagedSize : ((isReady ? sizes.find(v => leftFor(w, v) > 0) : undefined) ?? sizes[0] ?? 20);
+    if (!keeps && sizes.length > 0) setStagedSize(nextSize);
+    syncWeightAndPieces(w, nextSize);
   };
 
   const chooseSize = (inch: number) => {
     setStagedSize(inch);
     setQtyError(null);
+    syncWeightAndPieces(stagedStd, inch);
   };
 
   const stagedQty = () => Math.max(1, parseInt(stagingPieces, 10) || 1);
+
+  const updatePieces = (newPieces: number) => {
+    const pw = pieceWeight(stagedStd, stagedSize);
+    const cap = isReady ? Math.max(1, stagedLeft) : 9999;
+    const bounded = Math.min(cap, Math.max(1, newPieces));
+    setStagingPieces(String(bounded));
+    setLastChanged('pieces');
+    setQtyError(null);
+    if (pw > 0) {
+      setStagingWeight(parseFloat((bounded * pw).toFixed(2)).toString());
+    }
+  };
+
+  const handlePiecesInput = (val: string) => {
+    const pw = pieceWeight(stagedStd, stagedSize);
+    const clean = val.replace(/\D/g, '');
+    setStagingPieces(clean);
+    setLastChanged('pieces');
+    setQtyError(null);
+    const n = parseInt(clean, 10);
+    if (n > 0 && pw > 0) {
+      setStagingWeight(parseFloat((n * pw).toFixed(2)).toString());
+    }
+  };
+
+  const handlePiecesBlur = () => {
+    const n = parseInt(stagingPieces, 10);
+    if (!(n >= 1)) {
+      updatePieces(1);
+    }
+  };
+
+  const applyTargetWeight = (val: string | number) => {
+    const pw = pieceWeight(stagedStd, stagedSize);
+    const str = String(val);
+    setStagingWeight(str);
+    setLastChanged('weight');
+    setQtyError(null);
+
+    const num = parseFloat(str);
+    if (num > 0 && pw > 0) {
+      // Dual-input auto calculation: 200g / pieceWeight = quantity
+      const calcPieces = Math.max(1, Math.round(num / pw));
+      const cap = isReady ? Math.max(1, stagedLeft) : 9999;
+      if (isReady && calcPieces > stagedLeft) {
+        setQtyError(stagedLeft > 0 
+          ? `Stock limit: only ${stagedLeft} pcs available in ${stagedSize}" (${formatGrams(stagedLeft * pw)})` 
+          : `No pieces left in ${stagedSize}"`
+        );
+      }
+      setStagingPieces(String(Math.min(cap, calcPieces)));
+    }
+  };
+
+  const handleWeightInput = (val: string) => {
+    const clean = val.replace(/[^0-9.]/g, '');
+    applyTargetWeight(clean);
+  };
+
+  const handleWeightBlur = () => {
+    const pw = pieceWeight(stagedStd, stagedSize);
+    const num = parseFloat(stagingWeight);
+    if (!(num > 0)) {
+      const pcs = stagedQty();
+      if (pw > 0) {
+        setStagingWeight(parseFloat((pcs * pw).toFixed(2)).toString());
+      }
+    }
+  };
 
   // Quantity box → Pieces Container (merges into an existing weight × size row)
   const addStagedToPieces = () => {
@@ -203,6 +296,11 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
       setRowInputs(prev => ({ ...prev, [rows.length]: String(pcs) }));
     }
     setStagingPieces('1');
+    const pw = pieceWeight(stagedStd, stagedSize);
+    if (pw > 0) {
+      setStagingWeight(parseFloat((1 * pw).toFixed(2)).toString());
+    }
+    setLastChanged('pieces');
     setQtyError(null);
     setRequestDone(null);
   };
@@ -227,6 +325,7 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
     setStagedSize(v);
     setOtherSize(null);
     setOtherSizeError(null);
+    syncWeightAndPieces(stagedStd, v);
   };
 
   // Add to cart takes everything in the Pieces Container (or the quantity box when the container is empty), then empties it
@@ -457,52 +556,116 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
               {otherSizeError && <p className="text-[11px] font-semibold text-[#C94C4C] mt-1">{otherSizeError}</p>}
             </div>
 
-            {/* Quantity: the only way pieces go into the Pieces Container */}
-            <div className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl px-3 py-3 shadow-card">
-              <div className="flex items-center justify-between gap-1.5">
-                <div className="shrink-0">
-                  <p className="text-base font-bold text-[#2F2923] leading-tight">Quantity</p>
-                  <p className="text-[11px] text-[#766B60] whitespace-nowrap">{formatGrams(stagedPieceWeight)} - {stagedSize}"</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => { setStagingPieces(String(Math.max(1, stagedQty() - 1))); setQtyError(null); }}
-                    className="w-8 h-8 shrink-0 rounded-full bg-[#F5F0E8] border border-[#D2BFA7] flex items-center justify-center text-[#2F2923]"
-                    aria-label="Decrease pieces"
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={stagingPieces}
-                    onChange={e => { setStagingPieces(e.target.value.replace(/\D/g, '')); setQtyError(null); }}
-                    onBlur={() => { if (!(parseInt(stagingPieces, 10) >= 1)) setStagingPieces('1'); }}
-                    className="w-11 h-8 text-center text-sm font-bold bg-[#FFFCF7] border border-[#D2BFA7] rounded-full focus:outline-none focus:ring-1 focus:ring-[#6B5744]"
-                    aria-label="Pieces quantity"
-                  />
-                  <button
-                    onClick={() => {
-                      const cap = isReady ? Math.max(1, stagedLeft) : 9999;
-                      setStagingPieces(String(Math.min(cap, stagedQty() + 1)));
-                      setQtyError(null);
-                    }}
-                    className="w-8 h-8 shrink-0 rounded-full bg-[#F5F0E8] border border-[#D2BFA7] flex items-center justify-center text-[#2F2923]"
-                    aria-label="Increase pieces"
-                  >
-                    <Plus size={16} />
-                  </button>
+            {/* Quantity & Weight Dual Selection */}
+            <div className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-3.5 shadow-card space-y-3">
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E8DCCB]/60">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <Scale size={16} className="text-[#6B5744]" />
+                    <p className="text-base font-bold text-[#2F2923] leading-tight">Quantity & Weight</p>
+                  </div>
+                  <p className="text-[11px] text-[#766B60] mt-0.5">
+                    1 pc = <strong>{formatGrams(stagedPieceWeight)}</strong> ({stagedSize}")
+                    {isReady && <span className="ml-1 text-[#4F7D5B] font-semibold">· {stagedLeft} in stock</span>}
+                  </p>
                 </div>
                 <button
                   onClick={addStagedToPieces}
                   disabled={stagedUnavailable}
-                  className="shrink-0 px-2.5 py-2.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1 whitespace-nowrap transition-all shadow-xs"
+                  className="shrink-0 px-3 py-2 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all shadow-xs"
                 >
                   <Plus size={14} /> Add Product
                 </button>
               </div>
+
+              {/* Dual Input: Pieces <-> Target Weight */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* 1. By Pieces */}
+                <div className="bg-[#FAF7F2] border border-[#E8DCCB] rounded-xl p-2.5 flex items-center justify-between">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#766B60]">Quantity</label>
+                    <span className="text-xs font-bold text-[#2F2923]">Pieces (pcs)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updatePieces(stagedQty() - 1)}
+                      className="w-8 h-8 shrink-0 rounded-full bg-[#FFFCF7] border border-[#D2BFA7] flex items-center justify-center text-[#2F2923] hover:bg-[#F5F0E8] transition-all"
+                      aria-label="Decrease pieces"
+                    >
+                      <Minus size={15} />
+                    </button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={stagingPieces}
+                      onChange={e => handlePiecesInput(e.target.value)}
+                      onBlur={handlePiecesBlur}
+                      className="w-14 h-8 text-center text-sm font-bold bg-[#FFFCF7] border border-[#D2BFA7] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B5744]"
+                      aria-label="Pieces quantity"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updatePieces(stagedQty() + 1)}
+                      className="w-8 h-8 shrink-0 rounded-full bg-[#FFFCF7] border border-[#D2BFA7] flex items-center justify-center text-[#2F2923] hover:bg-[#F5F0E8] transition-all"
+                      aria-label="Increase pieces"
+                    >
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. By Target Weight */}
+                <div className="bg-[#FAF7F2] border border-[#E8DCCB] rounded-xl p-2.5 flex items-center justify-between">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#766B60]">Target Weight</label>
+                    <span className="text-xs font-medium text-[#766B60]">Auto-sets pcs</span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="e.g. 200"
+                      value={stagingWeight}
+                      onChange={e => handleWeightInput(e.target.value)}
+                      onBlur={handleWeightBlur}
+                      className="w-24 h-8 pr-6 pl-2 text-right text-sm font-bold bg-[#FFFCF7] border border-[#D2BFA7] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B5744]"
+                      aria-label="Target weight in grams"
+                    />
+                    <span className="absolute right-2 text-xs font-bold text-[#766B60] pointer-events-none">g</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Weight Presets & Calculation Summary */}
+              <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-semibold text-[#766B60]">Quick weight:</span>
+                  {[50, 100, 200, 500, 1000].map(g => {
+                    const isActive = sameNum(parseFloat(stagingWeight), g);
+                    return (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => applyTargetWeight(g)}
+                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md border transition-all ${
+                          isActive
+                            ? 'bg-[#6B5744] text-white border-[#6B5744]'
+                            : 'bg-[#FFFCF7] border-[#D2BFA7] text-[#6B5744] hover:bg-[#F5F0E8]'
+                        }`}
+                      >
+                        {g >= 1000 ? `${g / 1000}kg` : `${g}g`}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] font-semibold text-[#6B5744] bg-[#F5F0E8] px-2.5 py-1 rounded-lg border border-[#D2BFA7]/40">
+                  Total: <strong>{stagedQty()} pcs</strong> ≈ {formatGrams(stagedPieceWeight * stagedQty())}
+                </div>
+              </div>
+
               {mode === 'ON_ORDER' && stagedStdMoqGrams > 0 && (
-                <div className="mt-2 pt-2 border-t border-[#E8DCCB] flex items-center justify-between text-[11px] text-[#766B60]">
+                <div className="pt-2 border-t border-[#E8DCCB] flex items-center justify-between text-[11px] text-[#766B60]">
                   <span className="flex items-center gap-1 text-[#6B5744] font-semibold">
                     <AlertCircle size={13} className="text-[#B49A7A]" />
                     Slab MOQ: <strong>{stagedStdMoqGrams}g</strong> ({Math.ceil(stagedStdMoqGrams / (stagedPieceWeight || 1))} pcs in {stagedSize}")
@@ -512,7 +675,7 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
                   </span>
                 </div>
               )}
-              {qtyError && <p className="text-[11px] font-semibold text-[#C94C4C] mt-2">{qtyError}</p>}
+              {qtyError && <p className="text-[11px] font-semibold text-[#C94C4C] mt-1">{qtyError}</p>}
             </div>
 
             {/* Get discount: the slab in force for what Add to cart would take */}
