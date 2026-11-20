@@ -309,20 +309,16 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
   const chipOff = 'bg-[#FFFCF7] text-[#2F2923] border-[#D2BFA7] hover:border-[#6B5744]/60';
   const baseMaking = round2(applyStatePremium(baseMakingFor(product.labour_per_gram, product.weight_options, stagedStd), statePremiumPct));
   const currentWeightSlabs = weightSlabsFor(product.weight_options, stagedStd, mode);
-  const displayedWeightSlabs = useMemo(() => {
-    return currentWeightSlabs.map(sl => ({
-      ...sl,
-      making: round2(applyStatePremium(sl.making, statePremiumPct))
-    }));
-  }, [currentWeightSlabs, statePremiumPct]);
+  const displayedWeightSlabs = currentWeightSlabs.map(sl => ({
+    ...sl,
+    making: round2(applyStatePremium(sl.making, statePremiumPct))
+  }));
 
-  const displayedTiers = useMemo(() => {
-    return (tiersForMode(product.tiers, mode) || []).map(t => ({
-      ...t,
-      price_per_gram: round2(applyStatePremium(t.price_per_gram, statePremiumPct)),
-      discount_price_per_gram: t.discount_price_per_gram !== null ? round2(applyStatePremium(t.discount_price_per_gram, statePremiumPct)) : null
-    }));
-  }, [product.tiers, mode, statePremiumPct]);
+  const displayedTiers = (tiersForMode(product.tiers, mode) || []).map(t => ({
+    ...t,
+    price_per_gram: round2(applyStatePremium(t.price_per_gram, statePremiumPct)),
+    discount_price_per_gram: t.discount_price_per_gram !== null ? round2(applyStatePremium(t.discount_price_per_gram, statePremiumPct)) : null
+  }));
   const stagedPieceWeight = pieceWeight(stagedStd, stagedSize);
   const stagedStdMoqGrams = (mode === 'ON_ORDER' && currentWeightSlabs.length > 0) ? currentWeightSlabs[0].min_g : 0;
 

@@ -107,11 +107,13 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       </button>
 
       <div className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-5 shadow-sm">
-        <img
-          src={brandConfig.logoUrl}
-          alt={brandConfig.displayName}
-          className="h-10 w-auto max-w-[180px] object-contain mb-3"
-        />
+        <div className="flex justify-center mb-5">
+          <img
+            src={brandConfig.logoUrl}
+            alt={brandConfig.displayName}
+            className="h-16 md:h-20 w-auto max-w-[280px] object-contain"
+          />
+        </div>
         <h1 className="text-xl font-bold text-[#2F2923]">
           {isSignUp ? `Create your ${brandConfig.displayName} account` : `Welcome back to ${brandConfig.displayName}`}
         </h1>

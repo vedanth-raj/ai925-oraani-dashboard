@@ -190,6 +190,42 @@ function AccountScreen({ onBookCall }: { onBookCall: () => void }) {
   );
 }
 
+class PortalErrorBoundary extends React.Component<
+  { children: React.ReactNode; onReset?: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; onReset?: () => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: any) {
+    console.error('Portal component error caught by boundary:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 m-4 bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl text-center shadow-card">
+          <p className="text-sm font-bold text-[#2F2923] mb-1">Could not display this screen</p>
+          <p className="text-xs text-[#766B60] mb-4">An error occurred while rendering product details.</p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              this.props.onReset?.();
+            }}
+            className="px-4 py-2 bg-[#6B5744] hover:bg-[#584534] text-white rounded-xl text-xs font-bold transition-all"
+          >
+            Back to Home
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const CustomerPortal: React.FC = () => {
   const { account } = useCustomerSession();
   const [tab, setTab] = useState<PortalTab>('shop');
@@ -335,7 +371,11 @@ export const CustomerPortal: React.FC = () => {
         )}
 
         <main className="pb-16 relative z-10">
-          {tab === 'shop' && renderShop()}
+          {tab === 'shop' && (
+            <PortalErrorBoundary onReset={() => setShopView({ type: 'home' })}>
+              {renderShop()}
+            </PortalErrorBoundary>
+          )}
           {tab === 'cart' && (
             <CartScreen
               carts={carts}

@@ -27,7 +27,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onSignIn, onSignUp
         <img
           src={brandConfig.logoUrl}
           alt={brandConfig.displayName}
-          className="h-24 w-auto max-w-[260px] object-contain mb-12 select-none"
+          className="h-28 md:h-32 w-auto max-w-[320px] object-contain mb-12 select-none"
         />
 
         <div className="w-full space-y-3">

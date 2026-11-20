@@ -205,24 +205,37 @@ console.log('TEST 3: Delivery Charges by Pincode...');
 console.log('TEST 4: Weight Slab Discounts (Rupees off labour by kg)...');
 {
   const now = new Date().toISOString();
-  // Ensure default slabs exist: 1-2kg -> Rs.2/g, 2kg+ -> Rs.4/g
-  db.prepare(`
-    INSERT OR REPLACE INTO weight_slab_discounts (id, min_kg, max_kg, discount_per_gram, is_active, created_at, updated_at)
-    VALUES ('wsd_1_2', 1.0, 2.0, 2.0, 1, ?, ?),
-           ('wsd_2_plus', 2.0, NULL, 4.0, 1, ?, ?)
-  `).run(now, now, now, now);
+  // Clean up any test slabs and test isolated slabs
+  const existingSlabs = db.prepare('SELECT * FROM weight_slab_discounts').all();
+  db.prepare('DELETE FROM weight_slab_discounts').run();
+  try {
+    // Ensure default slabs exist: 1-2kg -> Rs.2/g, 2kg+ -> Rs.4/g
+    db.prepare(`
+      INSERT OR REPLACE INTO weight_slab_discounts (id, min_kg, max_kg, discount_per_gram, is_active, created_at, updated_at)
+      VALUES ('wsd_1_2', 1.0, 2.0, 2.0, 1, ?, ?),
+             ('wsd_2_plus', 2.0, NULL, 4.0, 1, ?, ?)
+    `).run(now, now, now, now);
 
-  // 500 grams (0.5 kg) -> 0 discount
-  const d500 = getWeightSlabDiscount(500);
-  assert.strictEqual(d500.discount_per_gram, 0, 'Under 1kg should have 0 discount');
+    // 500 grams (0.5 kg) -> 0 discount
+    const d500 = getWeightSlabDiscount(500);
+    assert.strictEqual(d500.discount_per_gram, 0, 'Under 1kg should have 0 discount');
 
-  // 1500 grams (1.5 kg) -> Rs. 2/g discount
-  const d1500 = getWeightSlabDiscount(1500);
-  assert.strictEqual(d1500.discount_per_gram, 2, '1.5kg should get Rs. 2/g discount');
+    // 1500 grams (1.5 kg) -> Rs. 2/g discount
+    const d1500 = getWeightSlabDiscount(1500);
+    assert.strictEqual(d1500.discount_per_gram, 2, '1.5kg should get Rs. 2/g discount');
 
-  // 3000 grams (3.0 kg) -> Rs. 4/g discount
-  const d3000 = getWeightSlabDiscount(3000);
-  assert.strictEqual(d3000.discount_per_gram, 4, '3kg should get Rs. 4/g discount');
+    // 3000 grams (3.0 kg) -> Rs. 4/g discount
+    const d3000 = getWeightSlabDiscount(3000);
+    assert.strictEqual(d3000.discount_per_gram, 4, '3kg should get Rs. 4/g discount');
+  } finally {
+    // Restore existing slabs
+    for (const s of existingSlabs) {
+      db.prepare(`
+        INSERT OR REPLACE INTO weight_slab_discounts (id, min_kg, max_kg, discount_per_gram, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(s.id, s.min_kg, s.max_kg, s.discount_per_gram, s.is_active, s.created_at, s.updated_at);
+    }
+  }
 
   console.log('  [PASS] Weight slab discounts match correctly by order weight in kilograms.\n');
 }
