@@ -33,6 +33,17 @@ const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim(
 if (corsOrigins.length > 0) app.use('/api', cors({ origin: corsOrigins }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Support subpath reverse proxies (e.g. ai925.in/market or oraani.in/market via Cloudflare)
+app.use((req, res, next) => {
+  if (req.url.startsWith('/market/api')) {
+    req.url = req.url.replace(/^\/market\/api/, '/api');
+  } else if (req.url.startsWith('/market/uploads')) {
+    req.url = req.url.replace(/^\/market\/uploads/, '/uploads');
+  }
+  next();
+});
+
 app.use('/api', apiRateLimit, stripUploadSignatures, signUploadLinks);
 app.use('/api/portal/register', signupRateLimit);
 
@@ -136,8 +147,9 @@ if (fs.existsSync(CLIENT_DIST)) {
     }
     res.setHeader('Cache-Control', 'no-cache');
     const indexPath = path.join(CLIENT_DIST, 'index.html');
-    const isOraani = req.path.toLowerCase().startsWith('/oraani') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/oraani'));
-    const isAi925 = req.path.toLowerCase().startsWith('/ai925') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/ai925'));
+    const hostHeader = String(req.headers['x-forwarded-host'] || req.headers['host'] || req.hostname || '').toLowerCase();
+    const isOraani = req.path.toLowerCase().startsWith('/oraani') || hostHeader.includes('oraani') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/oraani'));
+    const isAi925 = req.path.toLowerCase().startsWith('/ai925') || hostHeader.includes('ai925') || (req.headers.referer && req.headers.referer.toLowerCase().includes('/ai925'));
 
     if (isOraani && fs.existsSync(indexPath)) {
       let html = fs.readFileSync(indexPath, 'utf8');

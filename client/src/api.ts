@@ -2,7 +2,7 @@
 export const TOKEN_KEY = 'ai925_token';
 export const USER_KEY = 'ai925_user';
 
-const API_BASE = '/api';
+const API_BASE = (typeof window !== 'undefined' && window.location.pathname.startsWith('/market')) ? '/market/api' : '/api';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
