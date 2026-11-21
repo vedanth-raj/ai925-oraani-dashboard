@@ -5,13 +5,14 @@ const { UPLOAD_SIGNING_KEY } = require('../utils/serverKeys');
 // ---------- Security headers ----------
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data: blob: https://www.google.com/recaptcha/ https://www.gstatic.com/",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.google.com/recaptcha/ https://*.googleapis.com",
+  "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/",
   "manifest-src 'self'",
-  "worker-src 'self'",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -22,7 +23,7 @@ function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=()');
   res.setHeader('Content-Security-Policy', CSP);
   if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
