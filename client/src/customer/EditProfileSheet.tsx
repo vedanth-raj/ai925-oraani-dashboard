@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Loader2, Eye, EyeOff } from 'lucide-react';
+import { X, Loader2, Eye, EyeOff, Check } from 'lucide-react';
 import { portalApi, type CustomerAccount } from '../api';
+import { getIndianStateFromPincode } from '../utils/pincode';
 
 // Customer asks to change their details and / or password. Nothing changes until an administrator approves.
 export const EditProfileSheet: React.FC<{ account: CustomerAccount; onClose: () => void; onSent: (account: CustomerAccount, message: string) => void }> = ({ account, onClose, onSent }) => {
@@ -10,7 +11,8 @@ export const EditProfileSheet: React.FC<{ account: CustomerAccount; onClose: () 
     phone: account.phone,
     email: account.email,
     address: account.address,
-    pin_code: account.pin_code || ''
+    pin_code: account.pin_code || '',
+    state: account.state || ''
   });
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -57,7 +59,34 @@ export const EditProfileSheet: React.FC<{ account: CustomerAccount; onClose: () 
         <div><label className={labelCls} htmlFor="pf-company">Company</label><input id="pf-company" value={form.company_name} onChange={e => set('company_name', e.target.value)} className={fieldCls} /></div>
         <div className="grid grid-cols-2 gap-2">
           <div><label className={labelCls} htmlFor="pf-phone">Mobile</label><input id="pf-phone" type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} className={fieldCls} /></div>
-          <div><label className={labelCls} htmlFor="pf-pin">PIN code</label><input id="pf-pin" inputMode="numeric" maxLength={6} value={form.pin_code} onChange={e => set('pin_code', e.target.value)} className={fieldCls} /></div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className={labelCls} htmlFor="pf-pin">PIN code</label>
+              {form.state && <span className="text-[10px] text-[#4F7D5B] font-bold flex items-center gap-0.5"><Check size={10} /> {form.state}</span>}
+            </div>
+            <input 
+              id="pf-pin" 
+              inputMode="numeric" 
+              maxLength={6} 
+              value={form.pin_code} 
+              onChange={e => {
+                const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+                const detectedState = getIndianStateFromPincode(digits);
+                setForm(f => ({ ...f, pin_code: digits, ...(detectedState ? { state: detectedState } : {}) }));
+              }} 
+              className={fieldCls} 
+            />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls} htmlFor="pf-state">State</label>
+          <input 
+            id="pf-state" 
+            value={form.state} 
+            onChange={e => set('state', e.target.value)} 
+            placeholder="Auto-detected from PIN" 
+            className={fieldCls} 
+          />
         </div>
         <div><label className={labelCls} htmlFor="pf-email">Email</label><input id="pf-email" type="email" value={form.email} onChange={e => set('email', e.target.value)} className={fieldCls} /></div>
         <div><label className={labelCls} htmlFor="pf-address">Address</label><textarea id="pf-address" rows={2} value={form.address} onChange={e => set('address', e.target.value)} className={fieldCls} /></div>

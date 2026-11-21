@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Eye, EyeOff, IdCard, KeyRound, Loader2, Mail, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, Check, Eye, EyeOff, IdCard, KeyRound, Loader2, ShieldCheck, Trash2, Upload, Smartphone } from 'lucide-react';
 import { useCustomerSession } from './customerSession';
 import { compressImage } from '../utils/imageCompressor';
 import { ACCOUNT_TYPES, portalApi, type AccountType } from '../api';
 import { getBrandConfig, getActiveBrand } from '../brand';
 import { sendFirebasePhoneOtp } from '../firebase';
+import { getIndianStateFromPincode } from '../utils/pincode';
 import type { ConfirmationResult } from 'firebase/auth';
 
 interface CustomerAuthScreenProps {
@@ -80,6 +81,13 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     setPinCode(digits);
     setPinNotice(null);
 
+    // Instant offline state detection (0ms delay)
+    const instantState = getIndianStateFromPincode(digits);
+    if (instantState) {
+      setSelectedState(instantState);
+      setPinNotice(`Detected: ${instantState}`);
+    }
+
     if (digits.length === 6) {
       setPinLoading(true);
       try {
@@ -89,7 +97,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
           setPinNotice(`Auto-fetched: ${res.state}${res.city ? ` (${res.city})` : ''}`);
         }
       } catch (err) {
-        // Fallback or manual selection continues
+        // Fallback continues with instant state
       } finally {
         setPinLoading(false);
       }
@@ -104,67 +112,40 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     setIdCardPreview(URL.createObjectURL(compressed));
   };
 
-  // Request OTP for sign in (Firebase Phone SMS for mobile, Server SMTP for email)
+  // Request Phone OTP for sign in (Firebase Phone SMS)
   const handleSendOtp = async () => {
-    const dest = identifier.trim();
-    if (!dest) {
-      setError('Please enter your mobile number or email');
+    const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number');
       return;
     }
     setError(null);
     setBusy(true);
 
-    // If mobile number, trigger Google Firebase Phone SMS OTP
-    if (!dest.includes('@')) {
-      const cleanPhone = dest.replace(/\D/g, '').slice(-10);
-      if (cleanPhone.length !== 10) {
-        setError('Please enter a valid 10-digit mobile number');
-        setBusy(false);
-        return;
-      }
-
-      try {
-        const confirmation = await sendFirebasePhoneOtp(cleanPhone);
-        setFirebaseConfirmation(confirmation);
-        setOtpSent(true);
-        setOtpCountdown(45);
-        setOtpNotice(`Verification code sent via SMS to +91 ${cleanPhone}`);
-      } catch (err: any) {
-        console.error('[Firebase Phone Auth Error]', err);
-        const code = err?.code || '';
-        let msg = err?.message || 'Could not send verification code';
-        if (code === 'auth/invalid-app-credential') {
-          msg = window.location.hostname === 'localhost'
-            ? 'Google blocks live SMS on "localhost". Please open http://127.0.0.1:3000/oraani in your browser instead!'
-            : 'App verification failed. Please reload or use http://127.0.0.1:3000/oraani.';
-        } else if (code === 'auth/invalid-phone-number') {
-          msg = 'Invalid mobile number format';
-        } else if (code === 'auth/quota-exceeded') {
-          msg = 'SMS quota exceeded for today. Please try again later.';
-        } else if (code === 'auth/captcha-check-failed') {
-          msg = 'reCAPTCHA verification failed. Please try again.';
-        } else if (code === 'auth/too-many-requests') {
-          msg = 'Too many requests. Please wait a minute before requesting another code.';
-        }
-        setError(msg);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
-    // If email address, dispatch via server SMTP
     try {
-      const res = await portalApi.sendOtp({ destination: dest, purpose: 'LOGIN', brand: activeBrand });
-      setFirebaseConfirmation(null);
+      const confirmation = await sendFirebasePhoneOtp(cleanPhone);
+      setFirebaseConfirmation(confirmation);
       setOtpSent(true);
       setOtpCountdown(45);
-      setOtpNotice(res.message);
-      if (res.dev_otp) {
-        console.log(`[Developer / Testing OTP]: ${res.dev_otp}`);
-      }
+      setOtpNotice(`Verification code sent via SMS to +91 ${cleanPhone}`);
     } catch (err: any) {
-      setError(err.message || 'Could not send verification code. Please check details.');
+      console.error('[Firebase Phone Auth Error]', err);
+      const code = err?.code || '';
+      let msg = err?.message || 'Could not send verification code';
+      if (code === 'auth/invalid-app-credential') {
+        msg = window.location.hostname === 'localhost'
+          ? 'Google blocks live SMS on "localhost". Please open http://127.0.0.1:3000/oraani in your browser instead!'
+          : 'App verification failed. Please reload or use http://127.0.0.1:3000/oraani.';
+      } else if (code === 'auth/invalid-phone-number') {
+        msg = 'Invalid mobile number format';
+      } else if (code === 'auth/quota-exceeded') {
+        msg = 'SMS quota exceeded for today. Please try again later.';
+      } else if (code === 'auth/captcha-check-failed') {
+        msg = 'reCAPTCHA verification failed. Please try again.';
+      } else if (code === 'auth/too-many-requests') {
+        msg = 'Too many requests. Please wait a minute before requesting another code.';
+      }
+      setError(msg);
     } finally {
       setBusy(false);
     }
@@ -208,9 +189,10 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       return;
     }
 
-    // Sign in flow: OTP (Firebase Phone SMS or Server OTP)
+    // Sign in flow: OTP (Firebase Phone SMS)
     if (authMethod === 'otp') {
-      if (!identifier.trim()) return setError('Please enter your mobile or email');
+      const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
+      if (cleanPhone.length !== 10) return setError('Please enter a valid 10-digit mobile number');
       if (!otpCode.trim() || otpCode.trim().length !== 6) return setError('Please enter the 6-digit verification code');
 
       setBusy(true);
@@ -220,7 +202,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
           const idToken = await cred.user.getIdToken();
           await signInWithFirebase(idToken, rememberMe);
         } else {
-          await signInWithOtp(identifier.trim(), otpCode.trim(), rememberMe);
+          await signInWithOtp(cleanPhone, otpCode.trim(), rememberMe);
         }
       } catch (err: any) {
         setError(err.message || 'Invalid or expired verification code');
@@ -231,15 +213,16 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     }
 
     // Password sign in
-    if (!identifier.trim() || !password) {
-      return setError('Enter your mobile number or email and password');
+    const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10 || !password) {
+      return setError('Enter your 10-digit mobile number and password');
     }
 
     setBusy(true);
     try {
-      await signIn(identifier.trim(), password, rememberMe);
+      await signIn(cleanPhone, password, rememberMe);
     } catch (err: any) {
-      setError(err.message || 'Invalid mobile/email or password');
+      setError(err.message || 'Invalid mobile number or password');
     } finally {
       setBusy(false);
     }
@@ -265,7 +248,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         <p className="text-xs text-[#766B60] mb-5">
           {isSignUp
             ? 'Your profile will be verified by our team before you can buy.'
-            : 'Sign in with your mobile, email, or one-time code.'}
+            : 'Sign in with your registered mobile number.'}
         </p>
 
         {/* Sign In Method Toggle: Password vs OTP */}
@@ -435,26 +418,36 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
               </div>
             </>
           ) : authMethod === 'otp' ? (
-            /* OTP Sign In Form */
+            /* OTP Sign In Form (Phone SMS only) */
             <div className="space-y-3">
               <div>
-                <label className={label} htmlFor="si-id-otp">Registered mobile or email</label>
+                <label className={label} htmlFor="si-id-otp">Registered Mobile Number</label>
                 <div className="flex gap-2">
-                  <input
-                    id="si-id-otp"
-                    className={field}
-                    value={identifier}
-                    onChange={e => { setIdentifier(e.target.value); setOtpSent(false); setFirebaseConfirmation(null); }}
-                    autoCapitalize="none"
-                    placeholder="e.g. 9876543210 or mail@domain.com"
-                  />
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#766B60] select-none">+91</span>
+                    <input
+                      id="si-id-otp"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      className={`${field} pl-11 font-mono tracking-wider font-semibold`}
+                      value={identifier}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setIdentifier(v);
+                        setOtpSent(false);
+                        setFirebaseConfirmation(null);
+                      }}
+                      placeholder="10-digit mobile number"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={handleSendOtp}
-                    disabled={busy || otpCountdown > 0 || !identifier.trim()}
-                    className="px-4 py-2.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white font-bold text-xs rounded-xl shrink-0 transition-all shadow-xs flex items-center gap-1.5"
+                    disabled={busy || otpCountdown > 0 || identifier.replace(/\D/g, '').length !== 10}
+                    className="px-4 py-2.5 bg-[#6B5744] hover:bg-[#584534] disabled:opacity-50 text-white font-bold text-xs rounded-xl shrink-0 transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
-                    {busy && !otpSent ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                    {busy && !otpSent ? <Loader2 size={14} className="animate-spin" /> : <Smartphone size={14} />}
                     {otpCountdown > 0 ? `${otpCountdown}s` : otpSent ? 'Resend' : 'Get OTP'}
                   </button>
                 </div>
@@ -478,19 +471,29 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                     onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
                   />
                   <p className="text-[11px] text-[#766B60] mt-1.5 text-center">
-                    {firebaseConfirmation
-                      ? 'Enter the 6-digit verification code sent via SMS to your mobile.'
-                      : 'Check your email inbox or spam folder for your 6-digit code.'}
+                    Enter the 6-digit verification code sent via SMS to your mobile.
                   </p>
                 </div>
               )}
             </div>
           ) : (
-            /* Password Sign In Form */
+            /* Password Sign In Form (Phone only) */
             <>
               <div>
-                <label className={label} htmlFor="si-id">Mobile number or email</label>
-                <input id="si-id" className={field} value={identifier} onChange={e => setIdentifier(e.target.value)} autoCapitalize="none" autoComplete="username" placeholder="Mobile or email" />
+                <label className={label} htmlFor="si-id">Registered Mobile Number</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#766B60] select-none">+91</span>
+                  <input
+                    id="si-id"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    className={`${field} pl-11 font-mono tracking-wider font-semibold`}
+                    value={identifier}
+                    onChange={e => setIdentifier(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="10-digit mobile number"
+                  />
+                </div>
               </div>
 
               <div>
@@ -505,7 +508,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                     autoComplete="current-password"
                     placeholder="Your password"
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766B60] p-1" aria-label="Show password">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#766B60] p-1 cursor-pointer" aria-label="Show password">
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>

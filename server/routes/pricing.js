@@ -351,4 +351,59 @@ router.delete('/weight-slab-discounts/:id', authenticateToken, requireAdminOrBus
   });
 });
 
+// =========================================================================
+// CUSTOMIZABLE WEIGHT SLAB DELIVERY CHARGES (Shipping Rules by Net Weight)
+// =========================================================================
+
+// GET /api/pricing/delivery-weight-slabs (staff & portal)
+router.get('/delivery-weight-slabs', authenticateAny, (req, res) => {
+  const slabs = db.prepare('SELECT * FROM delivery_weight_slabs ORDER BY min_weight_g ASC').all();
+  res.json({ delivery_weight_slabs: slabs });
+});
+
+// POST /api/pricing/delivery-weight-slabs (Admin & Business Admin)
+router.post('/delivery-weight-slabs', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const { min_weight_g, max_weight_g, shipping_charge, is_active = 1 } = req.body;
+  const min = parseFloat(min_weight_g);
+  const max = max_weight_g === null || max_weight_g === undefined || max_weight_g === '' ? null : parseFloat(max_weight_g);
+  const charge = parseFloat(shipping_charge);
+
+  if (isNaN(min) || min < 0) {
+    return res.status(400).json({ error: 'Minimum weight must be 0 grams or more' });
+  }
+  if (max !== null && (isNaN(max) || max <= min)) {
+    return res.status(400).json({ error: 'Maximum weight must be greater than minimum weight' });
+  }
+  if (isNaN(charge) || charge < 0) {
+    return res.status(400).json({ error: 'Shipping charge must be 0 or more' });
+  }
+
+  const id = 'dws_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO delivery_weight_slabs (id, min_weight_g, max_weight_g, shipping_charge, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, min, max, round2(charge), is_active ? 1 : 0, now, now);
+
+  logAudit(req.user.id, 'ADD_DELIVERY_WEIGHT_SLAB', 'delivery_weight_slabs', id, `Added delivery slab ${min}g-${max || 'above'}: Rs.${charge}`, req);
+  res.json({
+    success: true,
+    message: `Saved delivery slab of ₹${charge} for ${min}g to ${max ? max + 'g' : 'above'}`,
+    delivery_weight_slabs: db.prepare('SELECT * FROM delivery_weight_slabs ORDER BY min_weight_g ASC').all()
+  });
+});
+
+// DELETE /api/pricing/delivery-weight-slabs/:id (Admin & Business Admin)
+router.delete('/delivery-weight-slabs/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const { id } = req.params;
+  db.prepare('DELETE FROM delivery_weight_slabs WHERE id = ?').run(id);
+  logAudit(req.user.id, 'DELETE_DELIVERY_WEIGHT_SLAB', 'delivery_weight_slabs', id, `Deleted delivery weight slab ${id}`, req);
+  res.json({
+    success: true,
+    message: 'Delivery weight slab removed',
+    delivery_weight_slabs: db.prepare('SELECT * FROM delivery_weight_slabs ORDER BY min_weight_g ASC').all()
+  });
+});
+
 module.exports = router;

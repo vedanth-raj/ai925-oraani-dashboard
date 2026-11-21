@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Loader2, MapPin, Sparkles, Phone, Plus, Trash2, FileText, Image as ImageIcon, Crosshair, UserCheck } from 'lucide-react';
 import { api } from '../api';
+import { getIndianStateFromPincode } from '../utils/pincode';
 import { useAuth } from '../auth';
 
 interface NewCustomerScreenProps {
@@ -158,6 +159,12 @@ export const NewCustomerScreen: React.FC<NewCustomerScreenProps> = ({
     const val = e.target.value.replace(/\D/g, '').slice(0, 6);
     setPincode(val);
 
+    // Instant offline state detection (0ms delay)
+    const instantState = getIndianStateFromPincode(val);
+    if (instantState) {
+      setState(instantState);
+    }
+
     if (val.length === 6) {
       try {
         setLookupLoading(true);
@@ -168,10 +175,10 @@ export const NewCustomerScreen: React.FC<NewCustomerScreenProps> = ({
         if (res.zone && ['North', 'South', 'East', 'West'].includes(res.zone)) {
           setZone(res.zone as any);
         }
-        setLookupMessage(`Resolved: ${res.city || ''}, ${res.state || ''} (${res.zone || ''})`);
+        setLookupMessage(`Resolved: ${res.city || ''}, ${res.state || instantState || ''} (${res.zone || ''})`);
       } catch (err: any) {
         console.warn('Pincode lookup error:', err);
-        setLookupMessage('Postal lookup failed — please fill city & state manually');
+        setLookupMessage(instantState ? `Detected state: ${instantState}` : 'Postal lookup failed — please fill city & state manually');
       } finally {
         setLookupLoading(false);
       }

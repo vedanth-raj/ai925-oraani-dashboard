@@ -348,8 +348,15 @@ function catalogProduct(p, rate, statePremiumPct = 0) {
 // GET /api/portal/products?mode=ready|order&search=&category=
 router.get('/products', authenticateCustomer, requireApprovedCustomer, (req, res) => {
   const { mode, search, category } = req.query;
-  const purchaseMode = mode === 'ready' ? 'READY_STOCK' : 'ON_ORDER';
-  if (!canViewMode(req.customer, purchaseMode)) return sectionClosed(res, purchaseMode);
+  const canReady = canViewMode(req.customer, 'READY_STOCK');
+  const canOrder = canViewMode(req.customer, 'ON_ORDER');
+
+  if (!canReady && !canOrder) {
+    return res.status(403).json({ error: 'Catalog is not available on your account. Please contact the seller.', section_closed: true });
+  }
+
+  if (mode === 'ready' && !canReady) return sectionClosed(res, 'READY_STOCK');
+  if (mode === 'order' && !canOrder) return sectionClosed(res, 'ON_ORDER');
   let query = `
     SELECT p.*, c.name as category_name
     FROM products p
@@ -528,7 +535,7 @@ router.post('/checkout', authenticateCustomer, requireApprovedCustomer, (req, re
       if (netGrams < minGrams) {
         throw new Error(`Minimum ${mode === 'ON_ORDER' ? 'On Order' : 'Ready Stock'} order is ${minGrams} g of silver (your cart has ${parseFloat(netGrams.toFixed(2))} g)`);
       }
-      const delivery = deliveryChargeFor({ pin: customerPin(account, customer), zone: customer.zone, orderValue: sumPricing(lines).total_amount });
+      const delivery = deliveryChargeFor({ pin: customerPin(account, customer), zone: customer.zone, orderValue: sumPricing(lines).total_amount, weightGrams: netGrams });
       const created = insertOrder({
         customer,
         creatorId,
@@ -619,13 +626,14 @@ router.post('/orders/:id/pay', authenticateCustomer, requireApprovedCustomer, (r
   }
 });
 
-// GET /api/portal/delivery-quote?amount= (delivery charge for this customer's PIN code at an order value)
+// GET /api/portal/delivery-quote?amount=&weight_grams= (delivery charge for this customer's PIN code / weight slab at an order value)
 router.get('/delivery-quote', authenticateCustomer, requireApprovedCustomer, (req, res) => {
   const account = db.prepare('SELECT * FROM customer_accounts WHERE id = ?').get(req.customer.id);
   const customer = account.customer_id ? db.prepare('SELECT * FROM customers WHERE id = ?').get(account.customer_id) : null;
   const amount = parseFloat(req.query.amount) || 0;
+  const weightGrams = parseFloat(req.query.weight_grams) || 0;
   res.json({
-    delivery: deliveryChargeFor({ pin: customerPin(account, customer), zone: customer ? customer.zone : null, orderValue: amount }),
+    delivery: deliveryChargeFor({ pin: customerPin(account, customer), zone: customer ? customer.zone : null, orderValue: amount, weightGrams }),
     payment_terms: getPaymentTerms()
   });
 });

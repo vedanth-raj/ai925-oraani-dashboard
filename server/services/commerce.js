@@ -67,11 +67,28 @@ function customerPin(account, customer) {
   return match ? match[0] : null;
 }
 
-function deliveryChargeFor({ pin, zone, orderValue }) {
+function deliveryChargeFor({ pin, zone, orderValue, weightGrams = 0 }) {
   const rates = getDeliveryRates();
   if (rates.free_above !== null && orderValue >= rates.free_above) {
     return { charge: 0, basis: `Free above ₹${rates.free_above}`, pin };
   }
+
+  // 1. Check Customizable Weight Slab Delivery Rules first
+  const netWeight = parseFloat(weightGrams) || 0;
+  if (netWeight > 0) {
+    try {
+      const slabs = db.prepare('SELECT * FROM delivery_weight_slabs WHERE is_active = 1 ORDER BY min_weight_g DESC').all();
+      for (const slab of slabs) {
+        const min = Number(slab.min_weight_g) || 0;
+        const max = slab.max_weight_g !== null && slab.max_weight_g !== undefined ? Number(slab.max_weight_g) : null;
+        if (netWeight >= min && (max === null || netWeight < max)) {
+          return { charge: parseFloat(slab.shipping_charge) || 0, basis: 'Weight-based delivery', pin };
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Custom Pincode Rule
   if (pin) {
     try {
       const custom = db.prepare('SELECT charge, city, state FROM delivery_pincodes WHERE pincode = ?').get(String(pin).trim());
@@ -84,6 +101,8 @@ function deliveryChargeFor({ pin, zone, orderValue }) {
       .sort((a, b) => b.prefix.length - a.prefix.length)[0];
     if (rule) return { charge: rule.charge, basis: rule.label || `PIN ${rule.prefix}…`, pin };
   }
+
+  // 3. Zone Rule
   if (zone && rates.zones[zone] !== null && rates.zones[zone] !== undefined) {
     return { charge: rates.zones[zone], basis: `${zone} zone`, pin };
   }

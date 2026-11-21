@@ -18,7 +18,14 @@ interface CartScreenProps {
 export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onChange, onShop, onOrderPlaced }) => {
   const { account } = useCustomerSession();
   const statePremiumPct = account?.state_premium_pct || 0;
-  const [mode, setMode] = useState<PurchaseMode>(carts[initialMode].length > 0 || carts.ON_ORDER.length === 0 ? initialMode : 'ON_ORDER');
+  const canReady = account?.can_view_ready !== false;
+  const canOrder = account?.can_view_order !== false;
+
+  const defaultMode: PurchaseMode = !canOrder && canReady 
+    ? 'READY_STOCK' 
+    : (!canReady && canOrder ? 'ON_ORDER' : (carts[initialMode].length > 0 || carts.ON_ORDER.length === 0 ? initialMode : 'ON_ORDER'));
+
+  const [mode, setMode] = useState<PurchaseMode>(defaultMode);
   const [products, setProducts] = useState<Record<string, CatalogProduct>>({});
   const [slabDiscounts, setSlabDiscounts] = useState<WeightSlabDiscount[]>([]);
   const [rate, setRate] = useState<SilverRate | null>(null);
@@ -29,9 +36,22 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
   const [placedOrder, setPlacedOrder] = useState<{ order: any; options: PaymentOptions } | null>(null);
   const [delivery, setDelivery] = useState<DeliveryQuote | null>(null);
 
+  // Auto-switch mode if current mode was disabled by admin
+  useEffect(() => {
+    if (mode === 'ON_ORDER' && !canOrder && canReady) {
+      setMode('READY_STOCK');
+    } else if (mode === 'READY_STOCK' && !canReady && canOrder) {
+      setMode('ON_ORDER');
+    }
+  }, [mode, canReady, canOrder]);
+
   // Re-read products when the cart opens and every minute, so prices follow the silver rate and live stock
   useEffect(() => {
-    const load = () => portalApi.getProducts({ mode: 'order' })
+    const queryMode = mode === 'READY_STOCK' 
+      ? (canReady ? 'ready' : undefined) 
+      : (canOrder ? 'order' : undefined);
+
+    const load = () => portalApi.getProducts({ mode: queryMode })
       .then(res => {
         const map: Record<string, CatalogProduct> = {};
         res.products.forEach(p => { map[p.id] = p; });
@@ -40,30 +60,51 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
         if (res.weight_slab_discounts) {
           setSlabDiscounts(res.weight_slab_discounts);
         }
+        setError(null);
       })
-      .catch(err => setError(err.message || 'Failed to load prices'))
+      .catch(err => {
+        // Fallback: try alternative available mode if the requested mode is restricted
+        const altMode = queryMode === 'ready' ? (canOrder ? 'order' : undefined) : (canReady ? 'ready' : undefined);
+        if (altMode) {
+          portalApi.getProducts({ mode: altMode })
+            .then(res => {
+              const map: Record<string, CatalogProduct> = {};
+              res.products.forEach(p => { map[p.id] = p; });
+              setProducts(map);
+              setRate(res.silver_rate);
+              if (res.weight_slab_discounts) setSlabDiscounts(res.weight_slab_discounts);
+              setError(null);
+            })
+            .catch(e => setError(e.message || 'Failed to load prices'));
+        } else {
+          setError(err.message || 'Failed to load prices');
+        }
+      })
       .finally(() => setLoading(false));
+
     load();
     const timer = setInterval(load, 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [mode, canReady, canOrder]);
 
   const lines = carts[mode];
   const silverRate = rate?.rate_per_gram ?? 0;
   const priced = useMemo(() => priceCart(lines, products, silverRate, mode, statePremiumPct, slabDiscounts), [lines, products, silverRate, mode, statePremiumPct, slabDiscounts]);
   const goodsTotal = priced.total.total;
 
-  // Delivery charge for the customer's PIN code at this order value (the server charges the same at checkout)
+  // Delivery charge for customer's PIN code & weight slab at this order value (server charges identically)
   useEffect(() => {
     if (lines.length === 0) {
       setDelivery(null);
       return;
     }
     const t = setTimeout(() => {
-      portalApi.deliveryQuote(goodsTotal).then(res => setDelivery(res.delivery)).catch(() => setDelivery(null));
+      portalApi.deliveryQuote(goodsTotal, priced.total.weight_g)
+        .then(res => setDelivery(res.delivery))
+        .catch(() => setDelivery(null));
     }, 300);
     return () => clearTimeout(t);
-  }, [goodsTotal, lines.length]);
+  }, [goodsTotal, priced.total.weight_g, lines.length]);
   const deliveryCharge = delivery ? delivery.charge : 0;
   const payable = round2(goodsTotal + deliveryCharge);
 
@@ -95,17 +136,25 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
     <div className="px-4 pt-4 pb-44">
       <h1 className="text-2xl font-bold text-[#2F2923] mb-3">Cart</h1>
 
-      <div className="grid grid-cols-2 gap-1.5 bg-[#E8DCCB]/60 p-1 rounded-2xl mb-4">
-        {(['READY_STOCK', 'ON_ORDER'] as PurchaseMode[]).map(m => (
-          <button
-            key={m}
-            onClick={() => { setMode(m); setError(null); }}
-            className={`py-2 rounded-xl text-xs font-bold ${mode === m ? 'bg-[#FFFCF7] text-[#2F2923] shadow-xs' : 'text-[#766B60]'}`}
-          >
-            {MODE_LABEL[m]} ({carts[m].reduce((s, l) => s + l.pieces, 0)})
-          </button>
-        ))}
-      </div>
+      {canReady && canOrder ? (
+        <div className="grid grid-cols-2 gap-1.5 bg-[#E8DCCB]/60 p-1 rounded-2xl mb-4">
+          {(['READY_STOCK', 'ON_ORDER'] as PurchaseMode[]).map(m => (
+            <button
+              key={m}
+              onClick={() => { setMode(m); setError(null); }}
+              className={`py-2 rounded-xl text-xs font-bold ${mode === m ? 'bg-[#FFFCF7] text-[#2F2923] shadow-xs' : 'text-[#766B60]'}`}
+            >
+              {MODE_LABEL[m]} ({carts[m].reduce((s, l) => s + l.pieces, 0)})
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-4">
+          <span className="inline-block px-3 py-1.5 bg-[#6B5744]/10 text-[#6B5744] text-xs font-bold rounded-xl">
+            {MODE_LABEL[canReady ? 'READY_STOCK' : 'ON_ORDER']} ({carts[canReady ? 'READY_STOCK' : 'ON_ORDER'].reduce((s, l) => s + l.pieces, 0)})
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#6B5744]" /></div>

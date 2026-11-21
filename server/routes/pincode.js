@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const https = require('https');
 const { db } = require('../db/database');
-const { authenticateToken, requireAdmin, logAudit } = require('../middleware/auth');
+const { authenticateAny, authenticateToken, requireAdmin, logAudit } = require('../middleware/auth');
+const { lookupPincode, PIN_PREFIX_STATE } = require('../services/pincodeService');
 
 // Default state to zone mapping fallback
 const STATE_ZONE_MAP = {
@@ -85,7 +86,7 @@ function fetchPostalApi(pincode) {
 }
 
 // GET /api/pincode/:pincode
-router.get('/:pincode', authenticateToken, async (req, res) => {
+router.get('/:pincode', authenticateAny, async (req, res) => {
   const { pincode } = req.params;
 
   if (!pincode || !/^\d{6}$/.test(pincode)) {
@@ -94,7 +95,7 @@ router.get('/:pincode', authenticateToken, async (req, res) => {
 
   // 1. Check local SQLite cache first (vital for offline operation)
   const cached = db.prepare('SELECT * FROM pin_code_cache WHERE pin_code = ?').get(pincode);
-  if (cached) {
+  if (cached && cached.state) {
     return res.json({
       source: 'local_cache',
       city: cached.city,
@@ -104,13 +105,17 @@ router.get('/:pincode', authenticateToken, async (req, res) => {
     });
   }
 
+  // Fast offline fallback state by PIN prefix
+  const p2 = pincode.slice(0, 2);
+  const prefixState = pincode.startsWith('403') ? 'Goa' : (PIN_PREFIX_STATE[p2] || null);
+
   // 2. Fetch from Postal Pincode API if online
   try {
     const apiRes = await fetchPostalApi(pincode);
     if (Array.isArray(apiRes) && apiRes[0] && apiRes[0].Status === 'Success' && apiRes[0].PostOffice && apiRes[0].PostOffice.length > 0) {
       const po = apiRes[0].PostOffice[0];
       const city = po.District || po.Name || '';
-      const state = po.State || '';
+      const state = po.State || prefixState || '';
       const district = po.District || '';
       const zone = resolveZone(state, district, pincode);
 
@@ -120,7 +125,6 @@ router.get('/:pincode', authenticateToken, async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(pincode, city, state, district, zone, new Date().toISOString());
 
-      // Provide list of post offices in case of multiple localities
       const localities = apiRes[0].PostOffice.map(p => p.Name);
 
       return res.json({
@@ -131,16 +135,24 @@ router.get('/:pincode', authenticateToken, async (req, res) => {
         zone,
         localities
       });
-    } else {
-      return res.status(404).json({ error: 'PIN code not found in postal directory. You may enter address details manually.' });
     }
   } catch (err) {
-    console.warn(`PIN lookup failed for ${pincode}:`, err.message);
-    return res.status(503).json({
-      error: 'PIN code lookup service unavailable. You can enter the state and city manually.',
-      offline: true
+    console.warn(`PIN lookup online failed for ${pincode}:`, err.message);
+  }
+
+  // 3. Fallback to offline prefix state if online lookup didn't succeed
+  if (prefixState) {
+    const zone = resolveZone(prefixState, '', pincode);
+    return res.json({
+      source: 'prefix_fallback',
+      city: '',
+      state: prefixState,
+      district: '',
+      zone
     });
   }
+
+  return res.status(404).json({ error: 'PIN code not found in postal directory.' });
 });
 
 // GET /api/pincode/mappings/list

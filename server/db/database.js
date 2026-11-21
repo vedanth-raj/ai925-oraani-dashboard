@@ -787,6 +787,17 @@ function initializeSchema() {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS delivery_weight_slabs (
+        id TEXT PRIMARY KEY,
+        min_weight_g REAL NOT NULL DEFAULT 0,
+        max_weight_g REAL,
+        shipping_charge REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_delivery_weight_slabs_min ON delivery_weight_slabs(min_weight_g);
+
       CREATE TABLE IF NOT EXISTS customer_otps (
         id TEXT PRIMARY KEY,
         destination TEXT NOT NULL,
@@ -812,6 +823,19 @@ function initializeSchema() {
       `);
       insertSlab.run('slab_1_2kg', 1.0, 2.0, 2.0, now, now);
       insertSlab.run('slab_2kg_plus', 2.0, null, 4.0, now, now);
+    }
+
+    // Seed default delivery weight slabs if empty
+    const existingDeliverySlabs = db.prepare('SELECT COUNT(*) as count FROM delivery_weight_slabs').get();
+    if (existingDeliverySlabs && existingDeliverySlabs.count === 0) {
+      const now = new Date().toISOString();
+      const insertDSlab = db.prepare(`
+        INSERT INTO delivery_weight_slabs (id, min_weight_g, max_weight_g, shipping_charge, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+      `);
+      insertDSlab.run('dws_0_500g', 0, 500, 100, now, now);
+      insertDSlab.run('dws_500_2000g', 500, 2000, 200, now, now);
+      insertDSlab.run('dws_2000g_plus', 2000, null, 350, now, now);
     }
 
     // 9. One-time: give every existing product a standard weight option built from its own fields

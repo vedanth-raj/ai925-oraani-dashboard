@@ -455,6 +455,19 @@ export const api = {
       body: formData
     }),
 
+  // Weight slab shipping charges (Customizable shipping rules by order weight range)
+  getDeliveryWeightSlabs: () =>
+    request<{ delivery_weight_slabs: DeliveryWeightSlab[] }>('/pricing/delivery-weight-slabs'),
+  saveDeliveryWeightSlab: (data: { min_weight_g: number; max_weight_g?: number | null; shipping_charge: number }) =>
+    request<{ success: boolean; message: string; delivery_weight_slabs: DeliveryWeightSlab[] }>('/pricing/delivery-weight-slabs', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  deleteDeliveryWeightSlab: (id: string) =>
+    request<{ success: boolean; message: string; delivery_weight_slabs: DeliveryWeightSlab[] }>(`/pricing/delivery-weight-slabs/${id}`, {
+      method: 'DELETE'
+    }),
+
   // Weight slab discounts (Rs/g discount on labour charges)
   getWeightSlabDiscounts: () =>
     request<{ weight_slab_discounts: WeightSlabDiscount[] }>('/pricing/weight-slab-discounts'),
@@ -666,9 +679,9 @@ export const portalApi = {
   me: () => portalRequest<{ account: CustomerAccount }>('/me'),
   presence: (coords?: { latitude: number; longitude: number }) =>
     portalRequest<{ ok: boolean }>('/presence', { method: 'POST', body: JSON.stringify(coords || {}) }),
-  getProducts: (params: { mode: 'ready' | 'order'; search?: string; category?: string }) => {
-    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString();
-    return portalRequest<{ products: CatalogProduct[]; categories: string[]; silver_rate: SilverRate; weight_slab_discounts?: WeightSlabDiscount[] }>(`/products?${q}`);
+  getProducts: (params?: { mode?: 'ready' | 'order'; search?: string; category?: string }) => {
+    const q = params ? new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString() : '';
+    return portalRequest<{ products: CatalogProduct[]; categories: string[]; silver_rate: SilverRate; weight_slab_discounts?: WeightSlabDiscount[] }>(`/products${q ? `?${q}` : ''}`);
   },
   getProduct: (id: string, mode?: 'READY_STOCK' | 'ON_ORDER') =>
     portalRequest<{ product: CatalogProduct; silver_rate: SilverRate; weight_slab_discounts?: WeightSlabDiscount[] }>(`/products/${id}${mode ? `?mode=${mode}` : ''}`),
@@ -684,8 +697,8 @@ export const portalApi = {
       method: 'POST',
       body: JSON.stringify({ method, plan })
     }),
-  deliveryQuote: (amount: number) =>
-    portalRequest<{ delivery: DeliveryQuote; payment_terms: PaymentTerms }>(`/delivery-quote?amount=${encodeURIComponent(amount.toFixed(2))}`),
+  deliveryQuote: (amount: number, weightGrams = 0) =>
+    portalRequest<{ delivery: DeliveryQuote; payment_terms: PaymentTerms }>(`/delivery-quote?amount=${encodeURIComponent(amount.toFixed(2))}&weight_grams=${encodeURIComponent(weightGrams.toString())}`),
   requestProfileChange: (data: Record<string, string>) =>
     portalRequest<{ account: CustomerAccount; message: string }>('/profile-requests', { method: 'POST', body: JSON.stringify(data) }),
   withdrawProfileChange: () => portalRequest<{ account: CustomerAccount }>('/profile-requests/pending', { method: 'DELETE' }),
@@ -763,6 +776,16 @@ export interface StatePremium {
   id: string;
   state: string;
   premium_pct: number;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeliveryWeightSlab {
+  id: string;
+  min_weight_g: number;
+  max_weight_g: number | null;
+  shipping_charge: number;
   is_active: number | boolean;
   created_at: string;
   updated_at: string;
