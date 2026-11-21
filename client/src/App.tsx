@@ -65,7 +65,13 @@ type SubView =
 // Signed-out entry: customer landing (sign in / sign up), customer portal, or staff login
 function PublicEntry() {
   const customer = useCustomerSession();
-  const [view, setView] = useState<'landing' | 'signin' | 'signup' | 'staff'>('landing');
+  const [view, setView] = useState<'landing' | 'signin' | 'signup' | 'staff'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = (window.location.pathname + window.location.hash).toLowerCase();
+      if (p.includes('staff') || p.includes('admin')) return 'staff';
+    }
+    return 'landing';
+  });
 
   // Once signed in, a later sign-out should come back to the landing page, not the old form
   useEffect(() => {
