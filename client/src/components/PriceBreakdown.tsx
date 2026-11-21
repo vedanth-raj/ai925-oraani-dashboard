@@ -12,6 +12,7 @@ interface PriceBreakdownProps {
   lines?: { key: string; label: string; breakdown: Breakdown; labour: number }[];
   // Rows after GST that change the amount payable (delivery charge, discount)
   extras?: { label: string; amount: number }[];
+  showStateMarkup?: boolean;
 }
 
 const SEGMENTS = [
@@ -25,7 +26,7 @@ export function rateDateLabel(iso?: string | null): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export const PriceBreakdown: React.FC<PriceBreakdownProps> = ({ breakdown, silverRate, labourPerGram, rateDate, title = 'Price Breakdown', note, lines, extras }) => {
+export const PriceBreakdown: React.FC<PriceBreakdownProps> = ({ breakdown, silverRate, labourPerGram, rateDate, title = 'Price Breakdown', note, lines, extras, showStateMarkup = false }) => {
   const total = breakdown.total || 0;
   const payable = total + (extras || []).reduce((s, e) => s + e.amount, 0);
 
@@ -117,7 +118,7 @@ export const PriceBreakdown: React.FC<PriceBreakdownProps> = ({ breakdown, silve
                 Includes −{formatINR(breakdown.slab_discount_per_gram)}/g weight slab discount
               </span>
             ) : null}
-            {breakdown.state_premium_pct && breakdown.state_premium_pct > 0 ? (
+            {showStateMarkup && breakdown.state_premium_pct && breakdown.state_premium_pct > 0 ? (
               <span className="block text-[10px] text-[#6B5744]">
                 +{breakdown.state_premium_pct}% state labour markup applied
               </span>

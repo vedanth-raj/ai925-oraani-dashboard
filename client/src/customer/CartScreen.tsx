@@ -173,12 +173,6 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
             </div>
           )}
 
-          {statePremiumPct > 0 && (
-            <div className="bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl p-2.5 text-xs text-[#6B5744] flex items-center justify-between">
-              <span>State extra cost ({statePremiumPct}%) for <strong>{account?.state || 'your region'}</strong> applied to making charges.</span>
-            </div>
-          )}
-
           <PriceBreakdown
             title="Bill Summary"
             breakdown={priced.total}

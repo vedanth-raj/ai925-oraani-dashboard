@@ -444,11 +444,6 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
             <span className="text-xs font-semibold text-[#766B60]">/g incl. GST</span>
           </p>
           <p className="text-[11px] text-[#766B60]">Making {formatINR(baseMaking)}/g at {formatGrams(stagedStd)}</p>
-          {statePremiumPct > 0 && (
-            <div className="mt-2 bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl px-2.5 py-1.5 text-xs text-[#6B5744] flex items-center gap-1.5 font-medium">
-              <span>Includes <strong>+{statePremiumPct}%</strong> extra labour charge for <strong>{account?.state || 'your state'}</strong>.</span>
-            </div>
-          )}
         </div>
 
         {product.description && <p className="text-xs text-[#766B60]">{product.description}</p>}
