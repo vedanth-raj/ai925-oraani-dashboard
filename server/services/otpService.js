@@ -73,6 +73,9 @@ async function generateAndSendOtp({ destination, purpose = 'LOGIN', brand = 'AI9
       otp,
       brand
     });
+    if (!dispatchResult.sent) {
+      throw new Error(dispatchResult.error || 'Failed to dispatch SMS through gateway');
+    }
   }
 
   return {

@@ -131,17 +131,19 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         setOtpCountdown(45);
         setOtpNotice(`Verification code sent via SMS to +91 ${cleanPhone}`);
       } catch (err: any) {
-        console.warn('[Firebase Phone Auth Warning]', err);
-        // Fallback to server OTP in case of client error
-        try {
-          const res = await portalApi.sendOtp({ destination: dest, purpose: 'LOGIN', brand: activeBrand });
-          setFirebaseConfirmation(null);
-          setOtpSent(true);
-          setOtpCountdown(45);
-          setOtpNotice(res.message);
-        } catch (serverErr: any) {
-          setError(err.message || serverErr.message || 'Could not send verification code');
+        console.error('[Firebase Phone Auth Error]', err);
+        const code = err?.code || '';
+        let msg = err?.message || 'Could not send verification code';
+        if (code === 'auth/invalid-phone-number') {
+          msg = 'Invalid mobile number format';
+        } else if (code === 'auth/quota-exceeded') {
+          msg = 'SMS quota exceeded for today. Please try again later.';
+        } else if (code === 'auth/captcha-check-failed') {
+          msg = 'reCAPTCHA verification failed. Please try again.';
+        } else if (code === 'auth/too-many-requests') {
+          msg = 'Too many requests. Please wait a minute before requesting another code.';
         }
+        setError(msg);
       } finally {
         setBusy(false);
       }

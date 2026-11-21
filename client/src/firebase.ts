@@ -20,6 +20,13 @@ export function setupRecaptcha(containerId: string, onSolved?: () => void): Reca
     try {
       (window as any).recaptchaVerifier.clear();
     } catch {}
+    delete (window as any).recaptchaVerifier;
+  }
+
+  // Clear any leftover DOM nodes inside the container element
+  const container = document.getElementById(containerId);
+  if (container) {
+    container.innerHTML = '';
   }
 
   const verifier = new RecaptchaVerifier(auth, containerId, {
