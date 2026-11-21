@@ -5,7 +5,7 @@ import { compressImage } from '../utils/imageCompressor';
 import { ACCOUNT_TYPES, portalApi, type AccountType } from '../api';
 import { getBrandConfig, getActiveBrand } from '../brand';
 import { sendFirebasePhoneOtp } from '../firebase';
-import { getIndianStateFromPincode } from '../utils/pincode';
+import { getIndianStateFromPincode, normalizeIndianState } from '../utils/pincode';
 import type { ConfirmationResult } from 'firebase/auth';
 
 interface CustomerAuthScreenProps {
@@ -93,8 +93,9 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       try {
         const res = await portalApi.lookupPincode(digits);
         if (res.state) {
-          setSelectedState(res.state);
-          setPinNotice(`Auto-fetched: ${res.state}${res.city ? ` (${res.city})` : ''}`);
+          const normalized = normalizeIndianState(res.state);
+          setSelectedState(normalized);
+          setPinNotice(`Auto-fetched: ${normalized}${res.city ? ` (${res.city})` : ''}`);
         }
       } catch (err) {
         // Fallback continues with instant state

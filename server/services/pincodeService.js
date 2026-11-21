@@ -27,6 +27,26 @@ const PIN_PREFIX_STATE = {
   '80': 'Bihar', '81': 'Bihar', '82': 'Jharkhand', '83': 'Jharkhand', '84': 'Bihar', '85': 'Bihar'
 };
 
+const STATE_ALIASES = {
+  'chattisgarh': 'Chhattisgarh',
+  'chhattisgarh': 'Chhattisgarh',
+  'orissa': 'Odisha',
+  'odisha': 'Odisha',
+  'pondicherry': 'Puducherry',
+  'puducherry': 'Puducherry',
+  'uttaranchal': 'Uttarakhand',
+  'uttarakhand': 'Uttarakhand',
+  'jammu & kashmir': 'Jammu and Kashmir',
+  'jammu and kashmir': 'Jammu and Kashmir'
+};
+
+function normalizeState(name) {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  const lower = trimmed.toLowerCase();
+  return STATE_ALIASES[lower] || trimmed;
+}
+
 function fetchPostalApi(pincode) {
   return new Promise((resolve, reject) => {
     const url = `https://api.postalpincode.in/pincode/${pincode}`;
@@ -58,7 +78,7 @@ async function lookupPincode(pincode) {
   try {
     const cached = db.prepare('SELECT city, state, district FROM pin_code_cache WHERE pin_code = ?').get(pin);
     if (cached && cached.state) {
-      return { city: cached.city, state: cached.state, district: cached.district, source: 'cache' };
+      return { city: cached.city, state: normalizeState(cached.state), district: cached.district, source: 'cache' };
     }
   } catch {}
 
@@ -77,7 +97,7 @@ async function lookupPincode(pincode) {
     if (Array.isArray(apiRes) && apiRes[0] && apiRes[0].Status === 'Success' && apiRes[0].PostOffice && apiRes[0].PostOffice.length > 0) {
       const po = apiRes[0].PostOffice[0];
       const city = po.District || po.Name || '';
-      const state = po.State || fallbackState || '';
+      const state = normalizeState(po.State || fallbackState || '');
       const district = po.District || '';
 
       try {
@@ -92,7 +112,7 @@ async function lookupPincode(pincode) {
   } catch (e) {}
 
   if (fallbackState) {
-    return { city: '', state: fallbackState, district: '', source: 'prefix_fallback' };
+    return { city: '', state: normalizeState(fallbackState), district: '', source: 'prefix_fallback' };
   }
 
   return null;
@@ -100,5 +120,6 @@ async function lookupPincode(pincode) {
 
 module.exports = {
   lookupPincode,
-  PIN_PREFIX_STATE
+  PIN_PREFIX_STATE,
+  normalizeState
 };

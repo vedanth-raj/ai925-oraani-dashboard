@@ -296,6 +296,8 @@ async function runCompleteCheck() {
 
     // Customer login via password if set
     if (custInDb && custInDb.status === 'APPROVED') {
+      // Ensure test customer has both modes active for system test
+      db.prepare("UPDATE customer_accounts SET can_view_ready = 1, can_view_order = 1 WHERE id = ?").run(custInDb.id);
       testCustomerAccount = custInDb;
       // Generate a customer JWT directly to test customer-facing APIs
       const { generateCustomerToken } = require('../server/middleware/auth');

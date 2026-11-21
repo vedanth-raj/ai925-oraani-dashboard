@@ -24,12 +24,33 @@ export const PIN_PREFIX_STATE: Record<string, string> = {
   '80': 'Bihar', '81': 'Bihar', '82': 'Jharkhand', '83': 'Jharkhand', '84': 'Bihar', '85': 'Bihar'
 };
 
+export const STATE_ALIASES: Record<string, string> = {
+  'chattisgarh': 'Chhattisgarh',
+  'chhattisgarh': 'Chhattisgarh',
+  'orissa': 'Odisha',
+  'odisha': 'Odisha',
+  'pondicherry': 'Puducherry',
+  'puducherry': 'Puducherry',
+  'uttaranchal': 'Uttarakhand',
+  'uttarakhand': 'Uttarakhand',
+  'jammu & kashmir': 'Jammu and Kashmir',
+  'jammu and kashmir': 'Jammu and Kashmir'
+};
+
+export function normalizeIndianState(name: string): string {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  const lower = trimmed.toLowerCase();
+  return STATE_ALIASES[lower] || trimmed;
+}
+
 export function getIndianStateFromPincode(pin: string): string {
   const clean = String(pin || '').replace(/\D/g, '');
   if (clean.startsWith('403')) return 'Goa';
   if (clean.length >= 2) {
     const p2 = clean.slice(0, 2);
-    return PIN_PREFIX_STATE[p2] || '';
+    const raw = PIN_PREFIX_STATE[p2] || '';
+    return normalizeIndianState(raw);
   }
   return '';
 }
