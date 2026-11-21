@@ -133,7 +133,11 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         console.error('[Firebase Phone Auth Error]', err);
         const code = err?.code || '';
         let msg = err?.message || 'Could not send verification code';
-        if (code === 'auth/invalid-phone-number') {
+        if (code === 'auth/invalid-app-credential') {
+          msg = window.location.hostname === 'localhost'
+            ? 'Google blocks live SMS on "localhost". Please open http://127.0.0.1:3000/oraani in your browser instead!'
+            : 'App verification failed. Please reload or use http://127.0.0.1:3000/oraani.';
+        } else if (code === 'auth/invalid-phone-number') {
           msg = 'Invalid mobile number format';
         } else if (code === 'auth/quota-exceeded') {
           msg = 'SMS quota exceeded for today. Please try again later.';
