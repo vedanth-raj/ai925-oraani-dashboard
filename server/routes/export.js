@@ -536,7 +536,7 @@ router.post('/import/customers', authenticateToken, requireAdminOrBusinessAdmin,
       insertStmt.run(
         newId('cust'), poc, company, values.phone || '', values.alternate_phone, values.additional_phones, values.gstin,
         values.email || '', values.address || '', values.pin_code || '', values.city || '', values.state || '', values.zone || 'West',
-        values.notes || 'Imported via CSV', values.category || 'Wholesaler', values.country || 'India', values.location_address,
+        values.notes || '', values.category || 'Wholesaler', values.country || 'India', values.location_address,
         values.latitude, values.longitude, req.user.id, now, now
       );
       imported++;
@@ -678,7 +678,7 @@ router.post('/import/products', authenticateToken, requireAdminOrBusinessAdmin, 
             std_weight_per_20in, physical_stock, reserved_stock, reorder_threshold, status,
             image_path, image_paths, labour_per_gram, weight_columns, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 50, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, name, sku, categoryId, description || 'Imported via CSV', summary.wire_size, summary.endings, summary.lock_type || 'Fish Lock',
+        `).run(id, name, sku, categoryId, description || '', summary.wire_size, summary.endings, summary.lock_type || 'Fish Lock',
           summary.std_weight_per_20in, initialStock, status, images[0] || null, JSON.stringify(images), summary.labour_per_gram || 0,
           JSON.stringify(tables.columns), now, now);
         db.prepare(`

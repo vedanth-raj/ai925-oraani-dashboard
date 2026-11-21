@@ -446,7 +446,9 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
           <p className="text-[11px] text-[#766B60]">Making {formatINR(baseMaking)}/g at {formatGrams(stagedStd)}</p>
         </div>
 
-        {product.description && <p className="text-xs text-[#766B60]">{product.description}</p>}
+        {product.description && product.description !== 'Imported via CSV' && (
+          <p className="text-xs text-[#766B60]">{product.description}</p>
+        )}
 
         {readyEmpty ? (
           <div className="bg-[#FFFCF7] border border-[#C94C4C]/30 rounded-2xl p-4">
