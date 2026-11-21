@@ -4,7 +4,7 @@ import { useCustomerSession } from './customerSession';
 import { compressImage } from '../utils/imageCompressor';
 import { ACCOUNT_TYPES, portalApi, type AccountType } from '../api';
 import { getBrandConfig, getActiveBrand } from '../brand';
-import { setupRecaptcha, sendFirebasePhoneOtp } from '../firebase';
+import { sendFirebasePhoneOtp } from '../firebase';
 import type { ConfirmationResult } from 'firebase/auth';
 
 interface CustomerAuthScreenProps {
@@ -124,8 +124,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       }
 
       try {
-        const verifier = setupRecaptcha('firebase-recaptcha-container');
-        const confirmation = await sendFirebasePhoneOtp(cleanPhone, verifier);
+        const confirmation = await sendFirebasePhoneOtp(cleanPhone);
         setFirebaseConfirmation(confirmation);
         setOtpSent(true);
         setOtpCountdown(45);
