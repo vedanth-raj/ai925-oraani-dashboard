@@ -20,6 +20,7 @@ const { customerPin, deliveryChargeFor, getPaymentTerms } = require('../services
 const { encrypt } = require('../utils/secrets');
 const { generateAndSendOtp, verifyOtp } = require('../services/otpService');
 const { lookupPincode } = require('../services/pincodeService');
+const { verifyFirebaseToken } = require('../services/firebaseAuth');
 
 const ID_CARDS_DIR = uploadsSubdir('id_cards');
 
@@ -217,6 +218,45 @@ router.post('/otp/login', rateLimitLogin, (req, res) => {
 
   if (!row) {
     return res.status(404).json({ error: 'No account found with this email or mobile. Please register first.' });
+  }
+
+  clearLoginAttempts(req.ip || req.connection?.remoteAddress);
+  const account = publicAccount(row.id);
+  res.json({ token: generateCustomerToken(account), account });
+});
+
+// POST /api/portal/auth/firebase-login { idToken } (Sign in using verified Firebase Phone/Google ID Token)
+router.post('/auth/firebase-login', rateLimitLogin, async (req, res) => {
+  const { idToken } = req.body || {};
+  if (!idToken) {
+    return res.status(400).json({ error: 'Firebase ID token is required' });
+  }
+
+  const result = await verifyFirebaseToken(idToken);
+  if (!result.valid) {
+    return res.status(401).json({ error: result.error });
+  }
+
+  let row = null;
+  if (result.phone) {
+    row = db.prepare(`
+      SELECT * FROM customer_accounts 
+      WHERE phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '+91', '') = ?
+    `).get(result.phone, result.phone);
+  }
+  if (!row && result.email) {
+    row = db.prepare('SELECT * FROM customer_accounts WHERE LOWER(email) = ?').get(result.email.toLowerCase());
+  }
+
+  if (!row) {
+    return res.status(404).json({
+      error: 'No account found matching this verified credential. Please sign up.',
+      verified: {
+        phone: result.phone,
+        email: result.email,
+        name: result.name
+      }
+    });
   }
 
   clearLoginAttempts(req.ip || req.connection?.remoteAddress);

@@ -27,6 +27,9 @@ cloudflared.exe
 # Environment Variables & Secrets
 .env
 .env.local
+server/config/firebase-service-account.json
+*firebase-service-account*.json
+firebase-adminsdk*.json
 
 # Build output
 client/dist/

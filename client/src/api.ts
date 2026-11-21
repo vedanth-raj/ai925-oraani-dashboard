@@ -651,6 +651,11 @@ export const portalApi = {
       method: 'POST',
       body: JSON.stringify(data)
     }),
+  loginWithFirebase: (idToken: string) =>
+    portalRequest<{ token: string; account: CustomerAccount }>('/auth/firebase-login', {
+      method: 'POST',
+      body: JSON.stringify({ idToken })
+    }),
   register: (formData: FormData) =>
     portalRequest<{ token: string; account: CustomerAccount; message: string }>('/register', { method: 'POST', body: formData }),
   login: (identifier: string, password: string) =>

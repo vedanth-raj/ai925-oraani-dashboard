@@ -4,6 +4,8 @@ import { useCustomerSession } from './customerSession';
 import { compressImage } from '../utils/imageCompressor';
 import { ACCOUNT_TYPES, portalApi, type AccountType } from '../api';
 import { getBrandConfig, getActiveBrand } from '../brand';
+import { setupRecaptcha, sendFirebasePhoneOtp } from '../firebase';
+import type { ConfirmationResult } from 'firebase/auth';
 
 interface CustomerAuthScreenProps {
   mode: 'signin' | 'signup';
@@ -25,7 +27,7 @@ const INDIAN_STATES = [
 ];
 
 export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, onSwitchMode, onBack }) => {
-  const { signIn, signInWithOtp, register } = useCustomerSession();
+  const { signIn, signInWithOtp, signInWithFirebase, register } = useCustomerSession();
   const activeBrand = getActiveBrand();
   const brandConfig = getBrandConfig(activeBrand);
 
@@ -41,6 +43,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   const [otpSent, setOtpSent] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
+  const [firebaseConfirmation, setFirebaseConfirmation] = useState<ConfirmationResult | null>(null);
 
   // Sign Up form state
   const [fullName, setFullName] = useState('');
@@ -101,7 +104,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     setIdCardPreview(URL.createObjectURL(compressed));
   };
 
-  // Request OTP for sign in
+  // Request OTP for sign in (Firebase Phone SMS for mobile, Server SMTP for email)
   const handleSendOtp = async () => {
     const dest = identifier.trim();
     if (!dest) {
@@ -110,8 +113,45 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     }
     setError(null);
     setBusy(true);
+
+    // If mobile number, trigger Google Firebase Phone SMS OTP
+    if (!dest.includes('@')) {
+      const cleanPhone = dest.replace(/\D/g, '').slice(-10);
+      if (cleanPhone.length !== 10) {
+        setError('Please enter a valid 10-digit mobile number');
+        setBusy(false);
+        return;
+      }
+
+      try {
+        const verifier = setupRecaptcha('firebase-recaptcha-container');
+        const confirmation = await sendFirebasePhoneOtp(cleanPhone, verifier);
+        setFirebaseConfirmation(confirmation);
+        setOtpSent(true);
+        setOtpCountdown(45);
+        setOtpNotice(`Verification code sent via SMS to +91 ${cleanPhone}`);
+      } catch (err: any) {
+        console.warn('[Firebase Phone Auth Warning]', err);
+        // Fallback to server OTP in case of client error
+        try {
+          const res = await portalApi.sendOtp({ destination: dest, purpose: 'LOGIN', brand: activeBrand });
+          setFirebaseConfirmation(null);
+          setOtpSent(true);
+          setOtpCountdown(45);
+          setOtpNotice(res.message);
+        } catch (serverErr: any) {
+          setError(err.message || serverErr.message || 'Could not send verification code');
+        }
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // If email address, dispatch via server SMTP
     try {
       const res = await portalApi.sendOtp({ destination: dest, purpose: 'LOGIN', brand: activeBrand });
+      setFirebaseConfirmation(null);
       setOtpSent(true);
       setOtpCountdown(45);
       setOtpNotice(res.message);
@@ -163,14 +203,20 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       return;
     }
 
-    // Sign in flow: OTP or Password
+    // Sign in flow: OTP (Firebase Phone SMS or Server OTP)
     if (authMethod === 'otp') {
       if (!identifier.trim()) return setError('Please enter your mobile or email');
       if (!otpCode.trim() || otpCode.trim().length !== 6) return setError('Please enter the 6-digit verification code');
 
       setBusy(true);
       try {
-        await signInWithOtp(identifier.trim(), otpCode.trim(), rememberMe);
+        if (firebaseConfirmation) {
+          const cred = await firebaseConfirmation.confirm(otpCode.trim());
+          const idToken = await cred.user.getIdToken();
+          await signInWithFirebase(idToken, rememberMe);
+        } else {
+          await signInWithOtp(identifier.trim(), otpCode.trim(), rememberMe);
+        }
       } catch (err: any) {
         setError(err.message || 'Invalid or expired verification code');
       } finally {
@@ -393,9 +439,9 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                     id="si-id-otp"
                     className={field}
                     value={identifier}
-                    onChange={e => { setIdentifier(e.target.value); setOtpSent(false); }}
+                    onChange={e => { setIdentifier(e.target.value); setOtpSent(false); setFirebaseConfirmation(null); }}
                     autoCapitalize="none"
-                    placeholder="e.g. yourname@mail.com"
+                    placeholder="e.g. 9876543210 or mail@domain.com"
                   />
                   <button
                     type="button"
@@ -408,6 +454,9 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                   </button>
                 </div>
               </div>
+
+              {/* Invisible Firebase reCAPTCHA container */}
+              <div id="firebase-recaptcha-container"></div>
 
               {otpSent && (
                 <div>
@@ -424,7 +473,9 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                     onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
                   />
                   <p className="text-[11px] text-[#766B60] mt-1.5 text-center">
-                    Check your email inbox or spam folder for your 6-digit code.
+                    {firebaseConfirmation
+                      ? 'Enter the 6-digit verification code sent via SMS to your mobile.'
+                      : 'Check your email inbox or spam folder for your 6-digit code.'}
                   </p>
                 </div>
               )}
