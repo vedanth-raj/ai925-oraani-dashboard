@@ -1,5 +1,69 @@
 const https = require('https');
 const { db } = require('../db/database');
+const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+
+let awsSnsClient = null;
+
+function getAwsSnsClient() {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const region = process.env.AWS_REGION || 'ap-south-1';
+
+  if (!accessKeyId || !secretAccessKey) return null;
+
+  if (!awsSnsClient) {
+    awsSnsClient = new SNSClient({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey
+      }
+    });
+  }
+  return awsSnsClient;
+}
+
+async function sendViaAwsSns(mobile, otp, brandName) {
+  const client = getAwsSnsClient();
+  if (!client) return { success: false, error: 'AWS SNS credentials not available' };
+
+  let phoneE164 = String(mobile || '').replace(/\D/g, '');
+  if (phoneE164.length === 10) phoneE164 = '91' + phoneE164;
+  if (!phoneE164.startsWith('+')) phoneE164 = '+' + phoneE164;
+
+  const brand = String(brandName || '').toUpperCase().includes('ORAANI') ? 'Oraani' : 'AI925';
+  const message = `Your ${brand} verification code is ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`;
+
+  try {
+    const cmd = new PublishCommand({
+      PhoneNumber: phoneE164,
+      Message: message,
+      MessageAttributes: {
+        'AWS.SNS.SMS.SMSType': {
+          DataType: 'String',
+          StringValue: 'Transactional'
+        },
+        'AWS.SNS.SMS.SenderID': {
+          DataType: 'String',
+          StringValue: brand.slice(0, 11)
+        }
+      }
+    });
+
+    const res = await client.send(cmd);
+    return {
+      success: true,
+      messageId: res.MessageId,
+      provider: 'AWS_SNS'
+    };
+  } catch (err) {
+    console.error(`[AWS SNS] Dispatch error for ${phoneE164}:`, err.message);
+    return {
+      success: false,
+      error: err.message
+    };
+  }
+}
 
 /**
  * Fetch SMS configuration from database app_settings or environment variables
@@ -156,9 +220,22 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
     return { sent: false, error: 'Invalid 10-digit mobile number' };
   }
 
-  const config = getSmsConfig();
+  console.log(`[SMS OTP] Dispatching ${otp} to mobile ${cleanPhone} (${brandName})`);
 
-  console.log(`[SMS OTP] Dispathing ${otp} to mobile ${cleanPhone} (${brandName})`);
+  // 1. First priority: AWS SNS (Official AWS Credentials)
+  const awsClient = getAwsSnsClient();
+  if (awsClient) {
+    console.log(`[AWS SNS OTP] Dispatching ${otp} via AWS SNS to +91${cleanPhone} (${brandName})`);
+    const awsRes = await sendViaAwsSns(cleanPhone, otp, brandName);
+    if (awsRes.success) {
+      console.log(`[AWS SNS OTP] Live SMS sent via AWS SNS! MessageId: ${awsRes.messageId}`);
+      return { sent: true, provider: 'AWS_SNS', messageId: awsRes.messageId, dev_otp: otp };
+    }
+    console.warn(`[AWS SNS OTP] AWS SNS attempt failed: ${awsRes.error}. Falling back...`);
+  }
+
+  // 2. Secondary fallback: 2Factor or Fast2SMS
+  const config = getSmsConfig();
 
   if (!config.apiKey) {
     console.warn(`[SMS OTP] No SMS API key configured in app_settings. SMS Code for ${cleanPhone} is: ${otp}`);
@@ -189,5 +266,6 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
 module.exports = {
   getSmsConfig,
   saveSmsConfig,
-  sendOtpSms
+  sendOtpSms,
+  sendViaAwsSns
 };

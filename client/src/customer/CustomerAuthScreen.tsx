@@ -4,9 +4,7 @@ import { useCustomerSession } from './customerSession';
 import { compressImage } from '../utils/imageCompressor';
 import { ACCOUNT_TYPES, portalApi, type AccountType } from '../api';
 import { getBrandConfig, getActiveBrand } from '../brand';
-import { sendFirebasePhoneOtp } from '../firebase';
 import { getIndianStateFromPincode, normalizeIndianState } from '../utils/pincode';
-import type { ConfirmationResult } from 'firebase/auth';
 
 interface CustomerAuthScreenProps {
   mode: 'signin' | 'signup';
@@ -28,7 +26,7 @@ const INDIAN_STATES = [
 ];
 
 export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, onSwitchMode, onBack }) => {
-  const { signIn, signInWithOtp, signInWithFirebase, register } = useCustomerSession();
+  const { signIn, signInWithOtp, register } = useCustomerSession();
   const activeBrand = getActiveBrand();
   const brandConfig = getBrandConfig(activeBrand);
 
@@ -44,7 +42,6 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   const [otpSent, setOtpSent] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
-  const [firebaseConfirmation, setFirebaseConfirmation] = useState<ConfirmationResult | null>(null);
 
   // Sign Up form state
   const [fullName, setFullName] = useState('');
@@ -113,7 +110,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     setIdCardPreview(URL.createObjectURL(compressed));
   };
 
-  // Request Phone OTP for sign in (Firebase Phone SMS)
+  // Request Phone OTP for sign in via AWS SNS SMS
   const handleSendOtp = async () => {
     const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) {
@@ -124,29 +121,17 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
     setBusy(true);
 
     try {
-      const confirmation = await sendFirebasePhoneOtp(cleanPhone);
-      setFirebaseConfirmation(confirmation);
+      await portalApi.sendOtp({
+        destination: cleanPhone,
+        brand: brandConfig.code,
+        purpose: 'LOGIN'
+      });
       setOtpSent(true);
       setOtpCountdown(45);
       setOtpNotice(`Verification code sent via SMS to +91 ${cleanPhone}`);
     } catch (err: any) {
-      console.error('[Firebase Phone Auth Error]', err);
-      const code = err?.code || '';
-      let msg = err?.message || 'Could not send verification code';
-      if (code === 'auth/invalid-app-credential') {
-        msg = window.location.hostname === 'localhost'
-          ? 'Google blocks live SMS on "localhost". Please open http://127.0.0.1:3000/oraani in your browser instead!'
-          : 'App verification failed. Please reload or use http://127.0.0.1:3000/oraani.';
-      } else if (code === 'auth/invalid-phone-number') {
-        msg = 'Invalid mobile number format';
-      } else if (code === 'auth/quota-exceeded') {
-        msg = 'SMS quota exceeded for today. Please try again later.';
-      } else if (code === 'auth/captcha-check-failed') {
-        msg = 'reCAPTCHA verification failed. Please try again.';
-      } else if (code === 'auth/too-many-requests') {
-        msg = 'Too many requests. Please wait a minute before requesting another code.';
-      }
-      setError(msg);
+      console.error('[AWS SMS OTP Error]', err);
+      setError(err?.message || 'Could not send verification code. Please check mobile number.');
     } finally {
       setBusy(false);
     }
@@ -198,13 +183,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
 
       setBusy(true);
       try {
-        if (firebaseConfirmation) {
-          const cred = await firebaseConfirmation.confirm(otpCode.trim());
-          const idToken = await cred.user.getIdToken();
-          await signInWithFirebase(idToken, rememberMe);
-        } else {
-          await signInWithOtp(cleanPhone, otpCode.trim(), rememberMe);
-        }
+        await signInWithOtp(cleanPhone, otpCode.trim(), rememberMe);
       } catch (err: any) {
         setError(err.message || 'Invalid or expired verification code');
       } finally {
@@ -437,7 +416,6 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                         const v = e.target.value.replace(/\D/g, '').slice(0, 10);
                         setIdentifier(v);
                         setOtpSent(false);
-                        setFirebaseConfirmation(null);
                       }}
                       placeholder="10-digit mobile number"
                     />

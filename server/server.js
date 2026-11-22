@@ -6,6 +6,26 @@ const os = require('os');
 const fs = require('fs');
 const multer = require('multer');
 
+// Load environment variables from .env if present
+const envPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq !== -1) {
+        const key = trimmed.substring(0, eq).trim();
+        const val = trimmed.substring(eq + 1).trim().replace(/^['"]|['"]$/g, '');
+        if (!process.env[key] && val) {
+          process.env[key] = val;
+        }
+      }
+    }
+  } catch {}
+}
+
 const { db, initializeSchema } = require('./db/database');
 const { seedDatabase } = require('./db/seed');
 
@@ -34,12 +54,13 @@ if (corsOrigins.length > 0) app.use('/api', cors({ origin: corsOrigins }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Support subpath reverse proxies (e.g. ai925.in/market or oraani.in/market via Cloudflare)
+// Support subpath reverse proxies (e.g. ai925.in/market or oraani.in/market)
 app.use((req, res, next) => {
-  if (req.url.startsWith('/market/api')) {
-    req.url = req.url.replace(/^\/market\/api/, '/api');
-  } else if (req.url.startsWith('/market/uploads')) {
-    req.url = req.url.replace(/^\/market\/uploads/, '/uploads');
+  if (req.url === '/market') {
+    return res.redirect(301, '/market/');
+  }
+  if (req.url.startsWith('/market/')) {
+    req.url = req.url.slice(7);
   }
   next();
 });
