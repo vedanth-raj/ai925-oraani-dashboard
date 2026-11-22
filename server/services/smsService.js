@@ -22,14 +22,15 @@ function getAwsSnsClient() {
 }
 
 /**
- * Dispatch transactional SMS via AWS SNS exclusively
+ * Dispatch transactional SMS via AWS SNS
+ * Without DLT, we omit custom SenderID so international routes don't get blocked by TRAI firewalls
  */
 async function sendViaAwsSns(mobile, otp, brandName) {
   const client = getAwsSnsClient();
   if (!client) {
     return {
       success: false,
-      error: 'AWS SNS credentials (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) not found in environment'
+      error: 'AWS SNS credentials not found in environment'
     };
   }
 
@@ -38,7 +39,7 @@ async function sendViaAwsSns(mobile, otp, brandName) {
   if (!phoneE164.startsWith('+')) phoneE164 = '+' + phoneE164;
 
   const brand = String(brandName || '').toUpperCase().includes('ORAANI') ? 'Oraani' : 'AI925';
-  const message = `Your ${brand} verification code is ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`;
+  const message = `${brand}: Your login code is ${otp}. Valid for 5 minutes.`;
 
   try {
     const cmd = new PublishCommand({
@@ -48,16 +49,12 @@ async function sendViaAwsSns(mobile, otp, brandName) {
         'AWS.SNS.SMS.SMSType': {
           DataType: 'String',
           StringValue: 'Transactional'
-        },
-        'AWS.SNS.SMS.SenderID': {
-          DataType: 'String',
-          StringValue: brand.slice(0, 11)
         }
       }
     });
 
     const res = await client.send(cmd);
-    console.log(`[AWS SNS OTP] Successfully dispatched OTP to ${phoneE164}. MessageId: ${res.MessageId}`);
+    console.log(`[AWS SNS OTP] Successfully dispatched to ${phoneE164}. MessageId: ${res.MessageId}`);
     return {
       success: true,
       messageId: res.MessageId,
@@ -73,7 +70,7 @@ async function sendViaAwsSns(mobile, otp, brandName) {
 }
 
 /**
- * Send live SMS OTP to a 4G/5G mobile user using AWS SNS exclusively
+ * Send live SMS OTP using AWS SNS exclusively
  */
 async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
   const isOraani = String(brand).toUpperCase() === 'ORAANI';
@@ -85,7 +82,7 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
   }
 
   console.log(`[SMS OTP] ==========================================`);
-  console.log(`[SMS OTP] Generating OTP for ${cleanPhone} (${brandName})`);
+  console.log(`[SMS OTP] Destination: ${cleanPhone} (${brandName})`);
   console.log(`[SMS OTP] ACTIVE CODE: ${otp}`);
   console.log(`[SMS OTP] ==========================================`);
 
@@ -100,7 +97,7 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
     };
   }
 
-  console.warn(`[SMS OTP] AWS SNS delivery failed: ${awsRes.error}`);
+  console.warn(`[SMS OTP] AWS SNS delivery notice: ${awsRes.error}`);
   return {
     sent: false,
     provider: 'AWS_SNS',
