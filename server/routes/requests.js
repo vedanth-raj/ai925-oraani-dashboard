@@ -115,38 +115,52 @@ function accountWithApprovers(id) {
     WHERE ca.id = ?
   `).get(id);
   if (!account) return account;
+  const rawBrand = (account.brand || 'AI925').toUpperCase();
+  const brand = ['AI925', 'ORAANI', 'BOTH'].includes(rawBrand) ? rawBrand : 'AI925';
   return {
     ...account,
-    brand: account.brand || 'AI925',
+    brand,
     can_view_ready: account.can_view_ready !== 0,
     can_view_order: account.can_view_order !== 0,
     online: isCustomerOnline(account.last_seen_at)
   };
 }
 
-// Reads { can_view_ready, can_view_order } from a request body; null when neither is sent
+// Reads { can_view_ready, can_view_order, brand } from a request body; null when none is sent
 function readAccess(body) {
   const b = body || {};
-  if (b.can_view_ready === undefined && b.can_view_order === undefined) return null;
+  if (b.can_view_ready === undefined && b.can_view_order === undefined && b.brand === undefined) return null;
   for (const key of ['can_view_ready', 'can_view_order']) {
     if (b[key] !== undefined && typeof b[key] !== 'boolean') {
       throw new Error('Visibility settings must be true or false');
     }
   }
+  if (b.brand !== undefined) {
+    const brand = String(b.brand).trim().toUpperCase();
+    if (!['AI925', 'ORAANI', 'BOTH'].includes(brand)) {
+      throw new Error('Brand access must be AI925, ORAANI, or BOTH');
+    }
+    b.brand = brand;
+  }
   return b;
 }
 
 function applyAccess(accountId, access, now) {
-  const current = db.prepare('SELECT can_view_ready, can_view_order FROM customer_accounts WHERE id = ?').get(accountId);
+  const current = db.prepare('SELECT can_view_ready, can_view_order, brand, customer_id FROM customer_accounts WHERE id = ?').get(accountId);
   const ready = access.can_view_ready !== undefined ? access.can_view_ready : current.can_view_ready !== 0;
   const order = access.can_view_order !== undefined ? access.can_view_order : current.can_view_order !== 0;
-  db.prepare('UPDATE customer_accounts SET can_view_ready = ?, can_view_order = ?, updated_at = ? WHERE id = ?')
-    .run(ready ? 1 : 0, order ? 1 : 0, now, accountId);
-  return { ready, order };
+  const brand = access.brand !== undefined ? access.brand : (current.brand || 'AI925');
+  db.prepare('UPDATE customer_accounts SET can_view_ready = ?, can_view_order = ?, brand = ?, updated_at = ? WHERE id = ?')
+    .run(ready ? 1 : 0, order ? 1 : 0, brand, now, accountId);
+  if (current.customer_id) {
+    db.prepare('UPDATE customers SET brand = ?, updated_at = ? WHERE id = ?').run(brand, now, current.customer_id);
+  }
+  return { ready, order, brand };
 }
 
-const accessLabel = ({ ready, order }) =>
-  [ready && 'Ready Stock', order && 'Order Purchase'].filter(Boolean).join(' + ') || 'nothing';
+const brandLabel = b => b === 'BOTH' ? 'AI 925 + Oraani' : b === 'ORAANI' ? 'Oraani' : 'AI 925';
+const accessLabel = ({ ready, order, brand }) =>
+  `${[ready && 'Ready Stock', order && 'Order Purchase'].filter(Boolean).join(' + ') || 'nothing'} · Brands: ${brandLabel(brand)}`;
 
 // GET /api/requests/customer-accounts/by-customer/:customerId (portal account of a customer record, if any)
 router.get('/customer-accounts/by-customer/:customerId', (req, res) => {

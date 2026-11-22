@@ -9,6 +9,8 @@ const {
   authenticateCustomer,
   requireApprovedCustomer,
   canViewMode,
+  resolveRequestBrand,
+  checkCustomerBrandAccess,
   rateLimitLogin,
   clearLoginAttempts
 } = require('../middleware/auth');
@@ -54,7 +56,10 @@ function publicAccount(id) {
   if (!account) return account;
   account.can_view_ready = account.can_view_ready !== 0;
   account.can_view_order = account.can_view_order !== 0;
-  account.brand = account.brand || 'AI925';
+  const rawBrand = (account.brand || 'AI925').toUpperCase();
+  account.brand = ['AI925', 'ORAANI', 'BOTH'].includes(rawBrand) ? rawBrand : 'AI925';
+  account.can_access_ai925 = account.brand === 'AI925' || account.brand === 'BOTH';
+  account.can_access_oraani = account.brand === 'ORAANI' || account.brand === 'BOTH';
 
   let customerState = account.state || null;
   if (!customerState && account.customer_id) {
@@ -168,6 +173,18 @@ router.post('/login', rateLimitLogin, (req, res) => {
     return res.status(401).json({ error: 'Invalid mobile/email or password' });
   }
 
+  const targetBrand = resolveRequestBrand(req);
+  const accountBrand = (row.brand || 'AI925').toUpperCase();
+  if (accountBrand !== 'BOTH' && accountBrand !== targetBrand) {
+    const allowedName = accountBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    const currentName = targetBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    return res.status(403).json({
+      error: `Your account is not enabled for ${currentName}. It is only authorized for ${allowedName}.`,
+      brand_restricted: true,
+      allowed_brand: accountBrand
+    });
+  }
+
   clearLoginAttempts(req.ip || req.connection?.remoteAddress);
   const account = publicAccount(row.id);
   res.json({ token: generateCustomerToken(account), account });
@@ -178,7 +195,27 @@ router.post('/otp/send', async (req, res) => {
   try {
     const { destination, purpose = 'LOGIN', brand } = req.body || {};
     if (!destination) return res.status(400).json({ error: 'Mobile or email destination is required' });
-    const result = await generateAndSendOtp({ destination, purpose, brand });
+    const targetBrand = resolveRequestBrand(req);
+
+    const dest = String(destination).trim().toLowerCase();
+    const row = dest.includes('@')
+      ? db.prepare('SELECT * FROM customer_accounts WHERE LOWER(email) = ?').get(dest)
+      : db.prepare('SELECT * FROM customer_accounts WHERE phone = ?').get(normalizePhone(dest));
+
+    if (row && purpose === 'LOGIN') {
+      const accountBrand = (row.brand || 'AI925').toUpperCase();
+      if (accountBrand !== 'BOTH' && accountBrand !== targetBrand) {
+        const allowedName = accountBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+        const currentName = targetBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+        return res.status(403).json({
+          error: `Your account is not enabled for ${currentName}. It is only authorized for ${allowedName}.`,
+          brand_restricted: true,
+          allowed_brand: accountBrand
+        });
+      }
+    }
+
+    const result = await generateAndSendOtp({ destination, purpose, brand: targetBrand });
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message || 'Failed to send OTP' });
@@ -219,6 +256,18 @@ router.post('/otp/login', rateLimitLogin, (req, res) => {
     return res.status(404).json({ error: 'No account found with this email or mobile. Please register first.' });
   }
 
+  const targetBrand = resolveRequestBrand(req);
+  const accountBrand = (row.brand || 'AI925').toUpperCase();
+  if (accountBrand !== 'BOTH' && accountBrand !== targetBrand) {
+    const allowedName = accountBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    const currentName = targetBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    return res.status(403).json({
+      error: `Your account is not enabled for ${currentName}. It is only authorized for ${allowedName}.`,
+      brand_restricted: true,
+      allowed_brand: accountBrand
+    });
+  }
+
   clearLoginAttempts(req.ip || req.connection?.remoteAddress);
   const account = publicAccount(row.id);
   res.json({ token: generateCustomerToken(account), account });
@@ -236,6 +285,17 @@ router.get('/pincode/:pincode', async (req, res) => {
 
 // GET /api/portal/me (verification status lives here)
 router.get('/me', authenticateCustomer, (req, res) => {
+  if (!checkCustomerBrandAccess(req.customer, req)) {
+    const targetBrand = resolveRequestBrand(req);
+    const accountBrand = (req.customer.brand || 'AI925').toUpperCase();
+    const currentName = targetBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    const allowedName = accountBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    return res.status(403).json({
+      error: `Your account is not enabled for ${currentName}. It is only authorized for ${allowedName}.`,
+      brand_restricted: true,
+      allowed_brand: accountBrand
+    });
+  }
   res.json({ account: publicAccount(req.customer.id) });
 });
 

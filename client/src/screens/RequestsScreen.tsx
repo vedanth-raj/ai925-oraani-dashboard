@@ -8,7 +8,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { formatINR } from '../pricing';
 import { PaymentStatusBadge } from '../components/DummyPaymentModal';
-import { AccessToggles, PresenceDot, LastLocation, lastSeenLabel } from '../components/CustomerPortalCard';
+import { AccessToggles, BrandAccessToggle, PresenceDot, LastLocation, lastSeenLabel } from '../components/CustomerPortalCard';
+import type { CustomerAccess } from '../api';
 
 export type RequestsTab = 'stock' | 'customers' | 'on_order' | 'changes' | 'calls';
 
@@ -25,10 +26,14 @@ function whatsappNumber(raw: string): string {
 
 // Same wa.me hand-off used for order summaries
 export function sendApprovalWhatsApp(account: any) {
-  const isOraani = account.brand === 'ORAANI';
-  const brandName = isOraani ? 'Oraani' : 'AI925';
-  const companyName = isOraani ? 'Oraani Silver' : 'Aryan International';
-  const portalUrl = isOraani ? `${window.location.origin}/oraani` : `${window.location.origin}/ai925`;
+  const brand = String(account.brand || 'AI925').toUpperCase();
+  const isBoth = brand === 'BOTH';
+  const isOraani = brand === 'ORAANI';
+  const brandName = isBoth ? 'AI 925 & Oraani' : isOraani ? 'Oraani' : 'AI925';
+  const companyName = isBoth ? 'Aryan International & Oraani Silver' : isOraani ? 'Oraani Silver' : 'Aryan International';
+  const portalUrl = isBoth
+    ? `https://app.ai925.in and https://app.oraani.in`
+    : isOraani ? `${window.location.origin}/oraani` : `${window.location.origin}/ai925`;
 
   const msg = [
     `*Dear ${account.full_name},*`,
@@ -97,7 +102,7 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
   const [previewCard, setPreviewCard] = useState<string | null>(null);
   const [justApproved, setJustApproved] = useState<any | null>(null);
   // Sections chosen before approving (both open unless an administrator switches one off)
-  const [pendingAccess, setPendingAccess] = useState<Record<string, { can_view_ready: boolean; can_view_order: boolean }>>({});
+  const [pendingAccess, setPendingAccess] = useState<Record<string, CustomerAccess>>({});
 
   const [onOrders, setOnOrders] = useState<any[]>([]);
 
@@ -138,7 +143,12 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
   const approve = async (account: any) => {
     setBusyId(account.id);
     try {
-      const res = await api.approveCustomerAccount(account.id, pendingAccess[account.id] || { can_view_ready: true, can_view_order: true });
+      const initialAccess = {
+        can_view_ready: true,
+        can_view_order: true,
+        brand: account.brand || 'AI925'
+      };
+      const res = await api.approveCustomerAccount(account.id, pendingAccess[account.id] || initialAccess);
       flash(res.message);
       // Final approval: prompt to notify on WhatsApp (opened from a tap so popup blockers allow it)
       if (res.fully_approved) setJustApproved(res.account);
@@ -166,7 +176,7 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
     }
   };
 
-  const saveAccess = async (account: any, access: { can_view_ready: boolean; can_view_order: boolean }) => {
+  const saveAccess = async (account: any, access: CustomerAccess) => {
     setBusyId(account.id);
     try {
       const res = await api.setCustomerAccess(account.id, access);
@@ -428,7 +438,14 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
                         </p>
                         {a.company_name && <p className="text-xs text-[#766B60] font-semibold">{a.company_name}</p>}
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {a.brand === 'BOTH' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-[#E8F0FE] text-[#1E429F] border border-[#B4C6FC]">Both Brands</span>
+                        ) : a.brand === 'ORAANI' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-[#FBF0EA] text-[#8C4A28] border border-[#E9C5B2]">Oraani</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-[#F5F0E8] text-[#6B5744] border border-[#D2BFA7]">AI 925</span>
+                        )}
                         {a.account_type && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-[#F5F0E8] text-[#6B5744] border border-[#D2BFA7]">{a.account_type}</span>
                         )}
@@ -465,16 +482,26 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
                     </div>
 
                     {a.status !== 'REJECTED' && (
-                      <div className="mt-3">
+                      <div className="mt-3 space-y-2">
                         {a.status === 'APPROVED' ? (
-                          <AccessToggles ready={a.can_view_ready} order={a.can_view_order} disabled={busyId === a.id} onChange={next => saveAccess(a, next)} />
+                          <>
+                            <AccessToggles ready={a.can_view_ready} order={a.can_view_order} disabled={busyId === a.id} onChange={next => saveAccess(a, next)} />
+                            <BrandAccessToggle brand={a.brand || 'AI925'} disabled={busyId === a.id} onChange={b => saveAccess(a, { brand: b })} />
+                          </>
                         ) : (
-                          <AccessToggles
-                            ready={(pendingAccess[a.id] || { can_view_ready: true }).can_view_ready}
-                            order={(pendingAccess[a.id] || { can_view_order: true }).can_view_order}
-                            disabled={busyId === a.id}
-                            onChange={next => setPendingAccess(prev => ({ ...prev, [a.id]: next }))}
-                          />
+                          <>
+                            <AccessToggles
+                              ready={pendingAccess[a.id]?.can_view_ready ?? (a.can_view_ready !== 0)}
+                              order={pendingAccess[a.id]?.can_view_order ?? (a.can_view_order !== 0)}
+                              disabled={busyId === a.id}
+                              onChange={next => setPendingAccess(prev => ({ ...prev, [a.id]: { ...(prev[a.id] || { can_view_ready: a.can_view_ready !== 0, can_view_order: a.can_view_order !== 0, brand: a.brand || 'AI925' }), ...next } }))}
+                            />
+                            <BrandAccessToggle
+                              brand={pendingAccess[a.id]?.brand || a.brand || 'AI925'}
+                              disabled={busyId === a.id}
+                              onChange={b => setPendingAccess(prev => ({ ...prev, [a.id]: { ...(prev[a.id] || { can_view_ready: a.can_view_ready !== 0, can_view_order: a.can_view_order !== 0 }), brand: b } }))}
+                            />
+                          </>
                         )}
                       </div>
                     )}

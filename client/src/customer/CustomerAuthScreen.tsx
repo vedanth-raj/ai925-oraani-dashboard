@@ -259,7 +259,27 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
           </div>
         )}
 
-        {error && <div className="mb-4 p-3 bg-[#FBE9E9] border border-[#C94C4C]/20 rounded-xl text-xs font-medium text-[#C94C4C]">{error}</div>}
+        {error && (
+          <div className="mb-4 p-3 bg-[#FBE9E9] border border-[#C94C4C]/30 rounded-xl text-xs font-medium text-[#C94C4C] space-y-2">
+            <div>{error}</div>
+            {error.includes('app.ai925.in') && (
+              <a
+                href="https://app.ai925.in"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#6B5744] text-white rounded-lg font-bold text-[11px] hover:bg-[#584534]"
+              >
+                Go to AI 925 Portal (app.ai925.in) →
+              </a>
+            )}
+            {error.includes('app.oraani.in') && (
+              <a
+                href="https://app.oraani.in"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#4A3B32] text-white rounded-lg font-bold text-[11px] hover:bg-[#392C24]"
+              >
+                Go to Oraani Portal (app.oraani.in) →
+              </a>
+            )}
+          </div>
+        )}
         {otpNotice && <div className="mb-4 p-3 bg-[#E3EEE6] border border-[#4F7D5B]/30 rounded-xl text-xs font-medium text-[#4F7D5B]">{otpNotice}</div>}
 
         <form onSubmit={submit} className="space-y-4" noValidate>

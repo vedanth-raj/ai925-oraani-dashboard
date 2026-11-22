@@ -84,7 +84,7 @@ router.get('/', authenticateToken, (req, res) => {
   }
 
   if (brand && brand !== 'All') {
-    query += ' AND c.brand = ?';
+    query += " AND (c.brand = ? OR c.brand = 'BOTH')";
     params.push(brand);
   }
 

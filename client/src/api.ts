@@ -1,4 +1,6 @@
 // API Client for AI925 Order Management System
+import { getActiveBrand } from './brand';
+
 export const TOKEN_KEY = 'ai925_token';
 export const USER_KEY = 'ai925_user';
 
@@ -574,6 +576,7 @@ export interface SilverRate {
 export interface CustomerAccess {
   can_view_ready?: boolean;
   can_view_order?: boolean;
+  brand?: 'AI925' | 'ORAANI' | 'BOTH';
 }
 
 export interface InventoryRow {
@@ -636,6 +639,7 @@ export function getCustomerToken(): string | null {
 async function portalRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
   headers.set('ngrok-skip-browser-warning', 'true');
+  headers.set('X-Brand', getActiveBrand());
   const token = getCustomerToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -647,6 +651,7 @@ async function portalRequest<T>(endpoint: string, options: RequestInit = {}): Pr
     const err: any = new Error(data.error || `Request failed with status ${response.status}`);
     err.verificationPending = Boolean(data.verification_pending);
     err.sectionClosed = Boolean(data.section_closed);
+    err.brandRestricted = Boolean(data.brand_restricted);
     err.status = response.status;
     throw err;
   }

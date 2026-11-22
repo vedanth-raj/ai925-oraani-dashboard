@@ -53,6 +53,9 @@ async function run() {
     console.log('>>> [8/8] Running Multi-Brand, State Premiums & Bulk Inventory Tests...\n');
     execSync('node tests/test_new_requirements.js', { stdio: 'inherit' });
 
+    console.log('>>> [9/9] Running Brand Access Permission & Login Restriction Tests...\n');
+    execSync('node tests/test_brand_access_restriction.js', { stdio: 'inherit' });
+
     console.log('\n======================================================');
     console.log(' ALL SUITES PASSED CLEANLY');
     console.log('======================================================\n');

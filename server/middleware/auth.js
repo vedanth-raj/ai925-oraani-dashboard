@@ -174,6 +174,40 @@ function canViewMode(customer, mode) {
   return false;
 }
 
+function resolveRequestBrand(req) {
+  if (!req) return 'AI925';
+  const hdr = req.headers ? req.headers['x-brand'] : null;
+  if (hdr) {
+    const u = String(hdr).trim().toUpperCase();
+    if (u === 'ORAANI' || u === 'AI925') return u;
+  }
+  if (req.body && req.body.brand) {
+    const u = String(req.body.brand).trim().toUpperCase();
+    if (u === 'ORAANI' || u === 'AI925') return u;
+  }
+  if (req.query && req.query.brand) {
+    const u = String(req.query.brand).trim().toUpperCase();
+    if (u === 'ORAANI' || u === 'AI925') return u;
+  }
+  const host = String((req.headers && (req.headers['x-forwarded-host'] || req.headers['host'])) || req.hostname || '').toLowerCase();
+  if (host.includes('oraani')) return 'ORAANI';
+  if (host.includes('ai925')) return 'AI925';
+
+  const ref = String((req.headers && (req.headers['referer'] || req.headers['origin'])) || '').toLowerCase();
+  if (ref.includes('oraani')) return 'ORAANI';
+  if (ref.includes('ai925')) return 'AI925';
+
+  return 'AI925';
+}
+
+function checkCustomerBrandAccess(customer, req) {
+  if (!customer) return false;
+  const accountBrand = String(customer.brand || 'AI925').trim().toUpperCase();
+  if (accountBrand === 'BOTH') return true;
+  const targetBrand = resolveRequestBrand(req);
+  return accountBrand === targetBrand;
+}
+
 function requireApprovedCustomer(req, res, next) {
   if (!req.customer || req.customer.status !== 'APPROVED' || !req.customer.customer_id) {
     return res.status(403).json({
@@ -181,6 +215,19 @@ function requireApprovedCustomer(req, res, next) {
       verification_pending: true
     });
   }
+
+  if (!checkCustomerBrandAccess(req.customer, req)) {
+    const targetBrand = resolveRequestBrand(req);
+    const accountBrand = String(req.customer.brand || 'AI925').trim().toUpperCase();
+    const currentName = targetBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    const allowedName = accountBrand === 'ORAANI' ? 'Oraani' : 'AI 925';
+    return res.status(403).json({
+      error: `Your account is not enabled for ${currentName}. It is only authorized for ${allowedName}.`,
+      brand_restricted: true,
+      allowed_brand: accountBrand
+    });
+  }
+
   next();
 }
 
@@ -261,6 +308,8 @@ module.exports = {
   authenticateCustomer,
   requireApprovedCustomer,
   canViewMode,
+  resolveRequestBrand,
+  checkCustomerBrandAccess,
   isCustomerOnline,
   authenticateAny,
   requireAdmin,

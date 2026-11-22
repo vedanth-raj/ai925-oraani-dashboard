@@ -59,6 +59,56 @@ export const AccessToggles: React.FC<{
   );
 };
 
+export type BrandAccessChoice = 'AI925' | 'ORAANI' | 'BOTH';
+
+export const BrandAccessToggle: React.FC<{
+  brand: BrandAccessChoice;
+  onChange: (brand: BrandAccessChoice) => void;
+  disabled?: boolean;
+}> = ({ brand, onChange, disabled }) => {
+  const options: { key: BrandAccessChoice; label: string; desc: string }[] = [
+    { key: 'AI925', label: 'AI 925 Only', desc: 'Can only access app.ai925.in' },
+    { key: 'ORAANI', label: 'Oraani Only', desc: 'Can only access app.oraani.in' },
+    { key: 'BOTH', label: 'Both Brands', desc: 'Can access both portals' }
+  ];
+
+  return (
+    <div className="mt-2.5 pt-2.5 border-t border-[#E8DCCB]">
+      <p className="text-[10px] font-bold text-[#766B60] uppercase mb-1.5 flex items-center justify-between">
+        <span>Brand Access Permission</span>
+        <span className="font-semibold text-[#6B5744] normal-case text-[10px]">
+          {brand === 'BOTH' ? 'AI 925 + Oraani' : brand === 'ORAANI' ? 'Oraani only' : 'AI 925 only'}
+        </span>
+      </p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {options.map(opt => {
+          const active = brand === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange(opt.key)}
+              title={opt.desc}
+              className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border text-center flex flex-col items-center justify-center gap-0.5 disabled:opacity-60 cursor-pointer ${
+                active
+                  ? opt.key === 'BOTH'
+                    ? 'bg-[#2E5A88] text-white border-[#2E5A88] shadow-xs'
+                    : opt.key === 'ORAANI'
+                    ? 'bg-[#4A3B32] text-white border-[#4A3B32] shadow-xs'
+                    : 'bg-[#6B5744] text-white border-[#6B5744] shadow-xs'
+                  : 'bg-[#F5F0E8] border-[#D2BFA7] text-[#766B60] hover:text-[#2F2923] hover:border-[#6B5744]/60'
+              }`}
+            >
+              <span>{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export const LastLocation: React.FC<{ account: any }> = ({ account }) =>
   account.last_latitude !== null && account.last_latitude !== undefined ? (
     <a
@@ -133,7 +183,10 @@ export const CustomerPortalCard: React.FC<{ customerId: string }> = ({ customerI
         <LastLocation account={account} />
       </div>
       {account.status === 'APPROVED' && (
-        <AccessToggles ready={account.can_view_ready} order={account.can_view_order} disabled={saving} onChange={save} />
+        <>
+          <AccessToggles ready={account.can_view_ready} order={account.can_view_order} disabled={saving} onChange={save} />
+          <BrandAccessToggle brand={account.brand || 'AI925'} disabled={saving} onChange={b => save({ brand: b })} />
+        </>
       )}
       {notice && <p className="text-[11px] font-semibold text-[#4F7D5B]">{notice}</p>}
       {error && <p className="text-[11px] font-semibold text-[#C94C4C]">{error}</p>}

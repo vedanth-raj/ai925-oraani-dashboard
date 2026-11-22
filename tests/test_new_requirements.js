@@ -158,7 +158,7 @@ async function runTests() {
     method: 'GET',
     headers: authHeaders
   });
-  assert(filterOraaniRes.data.customers.every(c => c.brand === 'ORAANI'), 'Filtered customers must all belong to ORAANI');
+  assert(filterOraaniRes.data.customers.every(c => c.brand === 'ORAANI' || c.brand === 'BOTH'), 'Filtered customers must belong to ORAANI or BOTH');
   assert(filterOraaniRes.data.customers.some(c => c.id === oraaniCustId), 'Created Oraani customer must appear in filter');
   console.log('[PASS] Customer list brand filter ?brand=ORAANI verified');
 
