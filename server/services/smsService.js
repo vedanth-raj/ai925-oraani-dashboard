@@ -22,6 +22,53 @@ function getAwsSnsClient() {
 }
 
 /**
+ * Dispatch transactional SMS via MSG91 (India sub-2s carrier route)
+ */
+async function sendViaMsg91(mobile, otp, brandName) {
+  const authKey = process.env.MSG91_AUTH_KEY;
+  if (!authKey) {
+    return { success: false, error: 'MSG91_AUTH_KEY not configured' };
+  }
+
+  let phone = String(mobile || '').replace(/\D/g, '');
+  if (phone.length === 10) phone = '91' + phone;
+
+  const templateId = process.env.MSG91_TEMPLATE_ID || '';
+  const url = new URL('https://control.msg91.com/api/v5/otp');
+  url.searchParams.set('mobile', phone);
+  url.searchParams.set('otp', String(otp));
+  if (templateId) url.searchParams.set('template_id', templateId);
+  url.searchParams.set('authkey', authKey);
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'authkey': authKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        otp: String(otp),
+        brand: brandName
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && (data.type === 'success' || data.type === 'default')) {
+      console.log(`[MSG91 OTP] Dispatched to ${phone}. Message: ${data.message || 'success'}`);
+      return { success: true, provider: 'MSG91', data };
+    }
+
+    const err = data.message || `HTTP ${res.status}`;
+    console.warn(`[MSG91 OTP] Dispatch failed for ${phone}: ${err}`);
+    return { success: false, error: err };
+  } catch (err) {
+    console.error(`[MSG91 OTP] Network error for ${phone}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Dispatch transactional SMS via AWS SNS
  * Without DLT, we omit custom SenderID so international routes don't get blocked by TRAI firewalls
  */
@@ -70,7 +117,7 @@ async function sendViaAwsSns(mobile, otp, brandName) {
 }
 
 /**
- * Send live SMS OTP using AWS SNS exclusively
+ * Send live SMS OTP (MSG91 priority if key provided, AWS SNS fallback)
  */
 async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
   const isOraani = String(brand).toUpperCase() === 'ORAANI';
@@ -86,6 +133,20 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
   console.log(`[SMS OTP] ACTIVE CODE: ${otp}`);
   console.log(`[SMS OTP] ==========================================`);
 
+  // 1. Try MSG91 if configured (instant Indian SMS delivery)
+  if (process.env.MSG91_AUTH_KEY) {
+    const msg91Res = await sendViaMsg91(cleanPhone, otp, brandName);
+    if (msg91Res.success) {
+      return {
+        sent: true,
+        provider: 'MSG91',
+        dev_otp: otp
+      };
+    }
+    console.warn(`[SMS OTP] MSG91 failed, attempting AWS SNS fallback: ${msg91Res.error}`);
+  }
+
+  // 2. Fallback to AWS SNS
   const awsRes = await sendViaAwsSns(cleanPhone, otp, brandName);
 
   if (awsRes.success) {
@@ -108,5 +169,6 @@ async function sendOtpSms({ mobile, otp, brand = 'AI925' }) {
 
 module.exports = {
   sendOtpSms,
+  sendViaMsg91,
   sendViaAwsSns
 };
