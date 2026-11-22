@@ -175,7 +175,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       return;
     }
 
-    // Sign in flow: OTP (Firebase Phone SMS)
+    // Sign in flow: OTP (AWS SNS Transactional SMS)
     if (authMethod === 'otp') {
       const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
       if (cleanPhone.length !== 10) return setError('Please enter a valid 10-digit mobile number');
@@ -432,8 +432,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                 </div>
               </div>
 
-              {/* Invisible Firebase reCAPTCHA container */}
-              <div id="firebase-recaptcha-container"></div>
+
 
               {otpSent && (
                 <div>

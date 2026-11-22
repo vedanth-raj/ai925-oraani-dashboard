@@ -67,14 +67,14 @@ async function generateAndSendOtp({ destination, purpose = 'LOGIN', brand = 'AI9
       purpose: purpose === 'LOGIN' ? 'sign-in' : 'registration'
     });
   } else {
-    // For mobile numbers, send via live SMS Gateway (Fast2SMS / 2Factor)
+    // For mobile numbers, dispatch via AWS SNS exclusively
     dispatchResult = await sendOtpSms({
       mobile: dest,
       otp,
       brand
     });
     if (!dispatchResult.sent) {
-      throw new Error(dispatchResult.error || 'Failed to dispatch SMS through gateway');
+      console.warn(`[OTP Service] AWS SNS dispatch warning for ${dest}:`, dispatchResult.error);
     }
   }
 
