@@ -91,8 +91,8 @@ export const ProfileChangesTab: React.FC<{ isSystemAdmin: boolean; onChanged: (m
               </div>
               {r.status === 'PENDING' ? (
                 <div className="flex gap-2 mt-3">
-                  <button disabled={busyId === r.id} onClick={() => act(r, false)} className="flex-1 py-2 bg-[#FFFCF7] border border-[#C94C4C]/40 text-[#C94C4C] rounded-xl text-xs font-bold flex items-center justify-center gap-1"><X size={14} /> Reject</button>
-                  <button disabled={busyId === r.id} onClick={() => act(r, true)} className="flex-1 py-2 bg-[#4F7D5B] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                  <button disabled={busyId === r.id} onClick={() => act(r, false)} className="flex-1 py-3 min-h-[46px] bg-[#FFFCF7] border border-[#C94C4C]/40 text-[#C94C4C] rounded-xl text-xs font-bold flex items-center justify-center gap-1 active:scale-[0.98] transition-transform cursor-pointer"><X size={14} /> Reject</button>
+                  <button disabled={busyId === r.id} onClick={() => act(r, true)} className="flex-1 py-3 min-h-[46px] bg-[#4F7D5B] hover:bg-[#3D6347] active:bg-[#32523a] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs active:scale-[0.98] transition-all cursor-pointer">
                     {busyId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
                   </button>
                 </div>

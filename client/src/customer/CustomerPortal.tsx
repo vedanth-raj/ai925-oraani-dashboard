@@ -100,7 +100,7 @@ function AccountScreen({ onBookCall }: { onBookCall: () => void }) {
   const change = account.change_request;
   const pending = change && change.status === 'PENDING' ? change : null;
   return (
-    <div className="px-4 pt-4 pb-24 space-y-4">
+    <div className="px-4 pt-4 pb-[max(7rem,calc(env(safe-area-inset-bottom)+5.5rem))] space-y-4">
       <h1 className="text-2xl font-bold text-[#2F2923]">Account</h1>
       {notice && <p className="text-xs font-semibold text-[#4F7D5B] bg-[#E3EEE6] rounded-xl px-3 py-2">{notice}</p>}
       <div className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-4 shadow-card">

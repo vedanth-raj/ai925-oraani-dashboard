@@ -209,7 +209,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F0E8] max-w-lg mx-auto px-4 py-5">
+    <div className="min-h-screen bg-[#F5F0E8] max-w-lg mx-auto px-4 pt-5 pb-[max(3rem,calc(env(safe-area-inset-bottom)+2rem))]">
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-semibold text-[#2F2923] mb-4">
         <ArrowLeft size={18} /> Back
       </button>
