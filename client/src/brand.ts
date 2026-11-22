@@ -83,10 +83,14 @@ export function detectBrand(): Brand {
     return 'AI925';
   }
 
-  // 2. Domain / Hostname detection (e.g. oraani.com, oraani.local, oraani-portal)
+  // 2. Domain / Hostname detection (e.g. oraani.in, app.oraani.in vs ai925.in, app.ai925.in)
   if (host.includes('oraani')) {
     safeSetStorage('ORAANI');
     return 'ORAANI';
+  }
+  if (host.includes('ai925')) {
+    safeSetStorage('AI925');
+    return 'AI925';
   }
 
   // 3. Stored preference
