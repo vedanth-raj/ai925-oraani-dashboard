@@ -54,13 +54,21 @@ if (corsOrigins.length > 0) app.use('/api', cors({ origin: corsOrigins }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Support subpath reverse proxies (e.g. ai925.in/market or oraani.in/market)
+// Support subpath reverse proxies (e.g. ai925.in/app or oraani.in/app, as well as /market)
 app.use((req, res, next) => {
+  if (req.url === '/app') {
+    return res.redirect(301, '/app/');
+  }
+  if (req.url.startsWith('/app/')) {
+    req.url = req.url.slice(4);
+    return next();
+  }
   if (req.url === '/market') {
     return res.redirect(301, '/market/');
   }
   if (req.url.startsWith('/market/')) {
     req.url = req.url.slice(7);
+    return next();
   }
   next();
 });
