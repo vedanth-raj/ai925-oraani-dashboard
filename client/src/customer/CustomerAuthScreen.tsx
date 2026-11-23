@@ -51,6 +51,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
   const [address, setAddress] = useState('');
   const [pinCode, setPinCode] = useState('');
   const [selectedState, setSelectedState] = useState('');
+  const [gstin, setGstin] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
   const [pinNotice, setPinNotice] = useState<string | null>(null);
 
@@ -149,6 +150,12 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('Please enter a valid email address');
       if (!address.trim()) return setError('Please enter your address');
       if (pinCode.trim() && !/^\d{6}$/.test(pinCode.trim())) return setError('Please enter a valid 6-digit PIN code');
+
+      // Mandatory business verification: Must provide either GST number or Business Card upload
+      if (!gstin.trim() && !idCard) {
+        return setError('Business verification is mandatory: Please enter your GST registration number OR upload your business card / ID proof to register.');
+      }
+
       if (password.length < 6) return setError('Password must be at least 6 characters');
       if (password !== confirm) return setError('Passwords do not match');
 
@@ -165,6 +172,7 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
         fd.append('password', password);
         fd.append('account_type', accountType || '');
         fd.append('brand', activeBrand);
+        if (gstin.trim()) fd.append('gstin', gstin.trim().toUpperCase());
         if (idCard) fd.append('id_card', idCard);
         await register(fd);
       } catch (err: any) {
@@ -369,30 +377,68 @@ export const CustomerAuthScreen: React.FC<CustomerAuthScreenProps> = ({ mode, on
                 </div>
               </div>
 
-              {/* Optional GST / ID card image */}
-              <div>
-                <span className={label}>GST / ID Card <span className="normal-case font-semibold">(optional)</span></span>
-                {idCardPreview ? (
-                  <div className="flex items-center gap-3 p-2 bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl">
-                    <img src={idCardPreview} alt="GST / ID card preview" className="w-20 h-14 object-cover rounded-lg border border-[#D2BFA7]" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-[#2F2923] flex items-center gap-1"><IdCard size={13} /> GST / ID card attached</p>
-                      <p className="text-[11px] text-[#766B60] truncate">{idCard?.name}</p>
-                    </div>
-                    <button type="button" onClick={() => { setIdCard(null); setIdCardPreview(null); }} className="p-2 text-[#C94C4C]" title="Remove">
-                      <Trash2 size={16} />
-                    </button>
+              {/* Mandatory Business Verification: GST No. OR Business Card */}
+              <div className="p-3.5 bg-[#F5F0E8] border border-[#D2BFA7] rounded-xl space-y-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-[#6B5744] uppercase flex items-center gap-1.5">
+                      <IdCard size={14} /> Business Verification *
+                    </span>
+                    <span className="text-[10px] font-bold text-[#8C4A27] bg-[#FBE9E9] border border-[#C94C4C]/20 px-2 py-0.5 rounded-full">
+                      GST or Card Required
+                    </span>
                   </div>
-                ) : (
-                  <label className="flex items-center gap-3 p-3 border-2 border-dashed border-[#D2BFA7] rounded-xl bg-[#F5F0E8]/40 cursor-pointer hover:bg-[#F5F0E8]">
-                    <Upload size={18} className="text-[#6B5744]" />
-                    <div>
-                      <p className="text-xs font-bold text-[#2F2923]">Upload GST certificate or ID card</p>
-                      <p className="text-[10px] text-[#766B60]">Photo or scan · helps us verify you faster</p>
-                    </div>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleIdCard} />
+                  <p className="text-[11px] text-[#766B60] leading-snug">
+                    Enter your GST registration number <strong>OR</strong> upload your visiting/business card below to create your profile.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[#2F2923] mb-1">
+                    GST Registration Number
                   </label>
-                )}
+                  <input
+                    type="text"
+                    maxLength={15}
+                    value={gstin}
+                    onChange={e => setGstin(e.target.value.toUpperCase())}
+                    placeholder="e.g. 27AAAAA0000A1Z5"
+                    className="w-full px-3 py-2 bg-white border border-[#D2BFA7] rounded-xl text-sm font-mono text-[#2F2923] placeholder-[#766B60] focus:outline-none focus:ring-1 focus:ring-[#6B5744]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="h-px bg-[#D2BFA7] flex-1" />
+                  <span className="text-[10px] font-bold text-[#766B60] uppercase">AND / OR</span>
+                  <div className="h-px bg-[#D2BFA7] flex-1" />
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-bold text-[#2F2923] mb-1">
+                    Business Card / Visiting Card / GST Document
+                  </span>
+                  {idCardPreview ? (
+                    <div className="flex items-center gap-3 p-2 bg-white border border-[#D2BFA7] rounded-xl">
+                      <img src={idCardPreview} alt="Business card preview" className="w-16 h-12 object-cover rounded-lg border border-[#D2BFA7]" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-[#2F2923] flex items-center gap-1"><IdCard size={13} /> Card Attached</p>
+                        <p className="text-[11px] text-[#766B60] truncate">{idCard?.name}</p>
+                      </div>
+                      <button type="button" onClick={() => { setIdCard(null); setIdCardPreview(null); }} className="p-2 text-[#C94C4C]" title="Remove">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 p-2.5 border-2 border-dashed border-[#D2BFA7] rounded-xl bg-white cursor-pointer hover:bg-[#FAF6F0] transition-colors">
+                      <Upload size={18} className="text-[#6B5744] shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-[#2F2923]">Upload Visiting Card or Certificate</p>
+                        <p className="text-[10px] text-[#766B60]">Photo or scan of visiting card or certificate</p>
+                      </div>
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleIdCard} />
+                    </label>
+                  )}
+                </div>
               </div>
 
               <div>

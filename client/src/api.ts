@@ -249,6 +249,34 @@ export const api = {
       body: formData
     }),
 
+  // Product Video Upload
+  uploadProductVideo: (formData: FormData) =>
+    request<{ success: boolean; file_path: string; filename: string }>('/products/upload-video', {
+      method: 'POST',
+      body: formData
+    }),
+
+  // Payment Transactions Ledger
+  getPayments: (params?: { brand?: string; search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.brand) q.set('brand', params.brand);
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request<{
+      payments: any[];
+      summary: {
+        total_amount: number;
+        total_count: number;
+        oraani_amount: number;
+        oraani_count: number;
+        ai925_amount: number;
+        ai925_count: number;
+      };
+    }>(`/payments${qs ? `?${qs}` : ''}`);
+  },
+
   // Location Tracking
   updateLocation: (coords: { latitude: number; longitude: number; address?: string }) =>
     request<{ success: boolean; timestamp: string }>('/users/location', {
@@ -972,6 +1000,7 @@ export interface CatalogProduct {
   thickness?: string | null;
   image_path: string | null;
   image_paths?: string[]; // every photo in order; the first is image_path
+  video_path?: string | null;
   std_weight_per_20in: number;
   labour_per_gram: number;
   sizes: ProductSize[];

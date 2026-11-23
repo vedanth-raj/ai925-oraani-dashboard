@@ -457,13 +457,18 @@ export const RequestsScreen: React.FC<RequestsScreenProps> = ({ onBack, onSelect
                     {a.status === 'APPROVED' && <div className="mt-1"><LastLocation account={a} /></div>}
 
                     <div className="mt-2">
-                      <p className="text-[10px] font-bold text-[#766B60] uppercase flex items-center gap-1 mb-1"><IdCard size={12} /> GST / ID Card</p>
+                      <p className="text-[10px] font-bold text-[#766B60] uppercase flex items-center gap-1 mb-1"><IdCard size={12} /> Business Verification</p>
+                      {a.gstin && (
+                        <p className="text-xs font-bold text-[#2F2923] mb-1.5">
+                          GST No: <span className="font-mono bg-[#E8DCCB]/60 px-1.5 py-0.5 rounded text-[#6B5744] select-all">{a.gstin}</span>
+                        </p>
+                      )}
                       {a.id_card_path ? (
                         <button onClick={() => setPreviewCard(a.id_card_path)} className="w-32 h-20 rounded-lg overflow-hidden border border-[#D2BFA7]">
                           <img src={a.id_card_path} alt={`${a.full_name} GST / ID card`} className="w-full h-full object-cover" />
                         </button>
                       ) : (
-                        <p className="text-[11px] text-[#766B60] italic">Not uploaded (optional)</p>
+                        <p className="text-[11px] text-[#766B60] italic">{a.gstin ? 'Business card not attached' : 'No document uploaded'}</p>
                       )}
                     </div>
 

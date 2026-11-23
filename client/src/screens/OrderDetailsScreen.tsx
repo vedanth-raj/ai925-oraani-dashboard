@@ -59,9 +59,8 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
       res.items?.forEach((it: any) => {
         const remainingPcs = it.requested_pieces - it.delivered_pieces;
         if (remainingPcs > 0) {
-          const unitExpWeight = it.size_inches && it.std_weight_per_20in
-            ? ((it.size_inches / 20.0) * it.std_weight_per_20in)
-            : (it.expected_weight / (it.requested_pieces || 1));
+          const itemStd = it.std_weight_g ?? it.std_weight_per_20in;
+          const unitExpWeight = it.unit_weight || (it.expected_weight && it.requested_pieces ? (it.expected_weight / it.requested_pieces) : (it.size_inches && itemStd ? (it.size_inches / 20.0) * itemStd : 0));
           initialMap[it.id] = {
             pieces: String(remainingPcs),
             weight: (remainingPcs * unitExpWeight).toFixed(2)
@@ -295,18 +294,20 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
     ? Math.min(100, Math.round((order.delivered_pieces / order.total_pieces) * 100))
     : 0;
 
-  // Group items by product
+  // Group items by product and standard weight
   const productGroups = items.reduce((acc: any, item: any) => {
-    if (!acc[item.product_id]) {
-      acc[item.product_id] = {
+    const stdWeight = item.std_weight_g ?? item.std_weight_per_20in;
+    const groupKey = `${item.product_id}_${stdWeight || 'default'}`;
+    if (!acc[groupKey]) {
+      acc[groupKey] = {
         product_name: item.product_name,
         product_sku: item.product_sku,
         category_name: item.category_name,
-        std_weight_per_20in: item.std_weight_per_20in,
+        std_weight_g: stdWeight,
         items: []
       };
     }
-    acc[item.product_id].items.push(item);
+    acc[groupKey].items.push(item);
     return acc;
   }, {});
 
@@ -550,7 +551,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                     {group.product_name}
                   </h3>
                   <p className="text-xs text-[#766B60] mb-3">
-                    {group.product_sku} · {group.category_name || 'Chains'} · {group.std_weight_per_20in}g/20in
+                    {group.product_sku} · {group.category_name || 'Chains'}{group.std_weight_g ? ` · Std ${group.std_weight_g}g/20in` : ''}
                   </p>
 
                   {/* Size Table matching Screenshot 27 */}
@@ -832,14 +833,13 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                 .filter((item: any) => item.requested_pieces - item.delivered_pieces > 0)
                 .map((item: any) => {
                   const remainingPcs = item.requested_pieces - item.delivered_pieces;
-                  const unitWeight = item.size_inches && item.std_weight_per_20in
-                    ? (item.size_inches / 20.0) * item.std_weight_per_20in
-                    : (item.expected_weight / (item.requested_pieces || 1));
+                  const itemStd = item.std_weight_g ?? item.std_weight_per_20in;
+                  const unitWeight = item.unit_weight || (item.expected_weight && item.requested_pieces ? (item.expected_weight / item.requested_pieces) : (item.size_inches && itemStd ? (item.size_inches / 20.0) * itemStd : 0));
 
                   return (
                     <div key={item.id} className="space-y-1.5">
                       <p className="text-sm font-bold text-[#2F2923]">
-                        {item.product_name} — {item.size_inches} in
+                        {item.product_name} {item.std_weight_g ? `(Std ${item.std_weight_g}g)` : ''} — {item.size_inches} in
                       </p>
                       <p className="text-xs text-[#766B60]">
                         Remaining: {remainingPcs} pcs · Expected unit {unitWeight.toFixed(3)}g

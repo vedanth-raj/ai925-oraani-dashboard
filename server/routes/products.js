@@ -5,7 +5,7 @@ const path = require('path');
 const multer = require('multer');
 const { db } = require('../db/database');
 const { authenticateToken, requireAdmin, requireAdminOrBusinessAdmin, logAudit } = require('../middleware/auth');
-const { uploadsSubdir, storeUploadedFile, ensureNamed, removeUpload, imageFileFilter, absFromRel, relFromAbs, uniqueFilePath, safeBaseName } = require('../utils/files');
+const { uploadsSubdir, storeUploadedFile, ensureNamed, removeUpload, imageFileFilter, videoFileFilter, absFromRel, relFromAbs, uniqueFilePath, safeBaseName } = require('../utils/files');
 const {
   round2,
   getCurrentSilverRate,
@@ -40,6 +40,33 @@ router.post(
     }
 
     const relativePath = storeUploadedFile(file, PRODUCTS_DIR, req.body.sku || req.body.name || 'product');
+    res.json({
+      success: true,
+      file_path: relativePath,
+      filename: relativePath.split('/').pop()
+    });
+  }
+);
+
+const uploadProductVid = multer({
+  dest: PRODUCTS_DIR,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  fileFilter: videoFileFilter('products')
+});
+
+// POST /api/products/upload-video (Upload product video, saved as "<SKU code>-video.mp4")
+router.post(
+  '/upload-video',
+  authenticateToken,
+  requireAdminOrBusinessAdmin,
+  uploadProductVid.fields([{ name: 'video', maxCount: 1 }, { name: 'product_video', maxCount: 1 }]),
+  (req, res) => {
+    const file = (req.files?.video || req.files?.product_video || [])[0];
+    if (!file) {
+      return res.status(400).json({ error: 'Please select a video file to upload' });
+    }
+
+    const relativePath = storeUploadedFile(file, PRODUCTS_DIR, (req.body.sku || req.body.name || 'product') + '-video');
     res.json({
       success: true,
       file_path: relativePath,
@@ -285,7 +312,7 @@ function productPayload(id) {
   const variants = getVariants(id);
   const tiers = getTiers(id);
   return {
-    product: { ...product, image_paths: productImages(product) },
+    product: { ...product, image_paths: productImages(product), video_path: product.video_path || null },
     variants,
     tiers,
     weight_options: getWeightOptions(id),
@@ -310,6 +337,7 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
     physical_stock,
     reorder_threshold,
     image_path,
+    video_path,
     labour_per_gram,
     variants,
     tiers
@@ -353,8 +381,8 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
         INSERT INTO products (
           id, name, sku, category_id, description, wire_size, endings, lock_type,
           std_weight_per_20in, physical_stock, reserved_stock, reorder_threshold, status,
-          image_path, created_at, updated_at, labour_per_gram, weight_columns, image_paths, thickness
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          image_path, created_at, updated_at, labour_per_gram, weight_columns, image_paths, thickness, video_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         name.trim(),
@@ -374,7 +402,8 @@ router.post('/', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
         labour,
         JSON.stringify(tables.columns || []),
         JSON.stringify(storedImages),
-        summary.thickness ?? (thickness ? (String(thickness).includes('mm') ? String(thickness).trim() : String(thickness).trim() + ' mm') : '2.0 mm')
+        summary.thickness ?? (thickness ? (String(thickness).includes('mm') ? String(thickness).trim() : String(thickness).trim() + ' mm') : '2.0 mm'),
+        video_path ? String(video_path).trim() : null
       );
 
       // Log initial stock intake in inventory movement ledger
@@ -413,6 +442,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
     physical_stock,
     reorder_threshold,
     image_path,
+    video_path,
     labour_per_gram,
     variants,
     tiers
@@ -449,6 +479,9 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
   const oldImages = productImages(product);
   const storedImages = nameImages(sentImages(req.body) || oldImages, finalSku);
   const storedImage = storedImages[0] || null;
+  const finalVideo = req.body.video_path !== undefined
+    ? (req.body.video_path ? String(req.body.video_path).trim() : null)
+    : product.video_path;
 
   try {
     db.transaction(() => {
@@ -467,6 +500,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
           reorder_threshold = COALESCE(?, reorder_threshold),
           image_path = ?,
           image_paths = ?,
+          video_path = ?,
           labour_per_gram = COALESCE(?, labour_per_gram),
           weight_columns = COALESCE(?, weight_columns),
           updated_at = ?
@@ -485,6 +519,7 @@ router.put('/:id', authenticateToken, requireAdminOrBusinessAdmin, (req, res) =>
         reorder_threshold !== undefined ? parseInt(reorder_threshold, 10) : null,
         storedImage,
         JSON.stringify(storedImages),
+        finalVideo,
         labourValue,
         tables.columns ? JSON.stringify(tables.columns) : null,
         now,

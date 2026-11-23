@@ -49,7 +49,7 @@ const newId = prefix => prefix + '_' + Date.now().toString(36) + '_' + Math.rand
 
 function publicAccount(id) {
   const account = db.prepare(`
-    SELECT id, full_name, company_name, phone, email, address, pin_code, state, id_card_path, status,
+    SELECT id, full_name, company_name, phone, email, address, pin_code, state, gstin, id_card_path, status,
       biz_approved_at, sys_approved_at, rejected_reason, customer_id, password_changed_at, created_at,
       account_type, can_view_ready, can_view_order, brand
     FROM customer_accounts WHERE id = ?
@@ -109,6 +109,7 @@ router.post('/register', uploadIdCard.single('id_card'), (req, res) => {
   const password = String(req.body.password || '');
   const accountType = String(req.body.account_type || '').trim();
   const brand = String(req.body.brand || '').toUpperCase() === 'ORAANI' ? 'ORAANI' : 'AI925';
+  const gstin = String(req.body.gstin || '').trim().toUpperCase();
 
   if (!fullName) return fail(400, 'Name is required');
   if (!ACCOUNT_TYPES.includes(accountType)) return fail(400, 'Choose Retailer, Wholesaler or Both');
@@ -117,6 +118,11 @@ router.post('/register', uploadIdCard.single('id_card'), (req, res) => {
   if (!EMAIL_RE.test(email)) return fail(400, 'Enter a valid email address');
   if (!address) return fail(400, 'Address is required');
   if (password.length < 6) return fail(400, 'Password must be at least 6 characters');
+
+  // Mandatory business verification: Must provide either GSTIN or Business Card / ID file
+  if (!gstin && !req.file) {
+    return fail(400, 'Business verification is mandatory: Please enter your GST registration number OR upload your business card / ID proof.');
+  }
 
   const clash = db.prepare(`
     SELECT phone, email FROM customer_accounts 
@@ -139,10 +145,10 @@ router.post('/register', uploadIdCard.single('id_card'), (req, res) => {
   db.transaction(() => {
     db.prepare(`
       INSERT INTO customer_accounts (
-        id, full_name, company_name, phone, email, address, pin_code, state, password_hash, password_enc, id_card_path,
+        id, full_name, company_name, phone, email, address, pin_code, state, gstin, password_hash, password_enc, id_card_path,
         account_type, brand, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-    `).run(id, fullName, companyName || null, phone, email, address, pinCode, state, bcrypt.hashSync(password, 10), passwordEnc, idCardPath,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+    `).run(id, fullName, companyName || null, phone, email, address, pinCode, state, gstin || null, bcrypt.hashSync(password, 10), passwordEnc, idCardPath,
       accountType, brand, now, now);
     db.prepare(`
       INSERT INTO customer_password_history (id, customer_account_id, password_enc, source, created_at)
@@ -355,6 +361,7 @@ function catalogProduct(p, rate, statePremiumPct = 0) {
     thickness: defaultThk,
     image_path: p.image_path,
     image_paths: productImages(p),
+    video_path: p.video_path || null,
     std_weight_per_20in: p.std_weight_per_20in,
     labour_per_gram: p.labour_per_gram || 0,
     state_premium_pct: statePremiumPct,

@@ -104,7 +104,7 @@ router.put('/stock-requests/:id', (req, res) => {
 
 function accountWithApprovers(id) {
   const account = db.prepare(`
-    SELECT ca.id, ca.full_name, ca.company_name, ca.phone, ca.email, ca.address, ca.id_card_path, ca.status,
+    SELECT ca.id, ca.full_name, ca.company_name, ca.phone, ca.email, ca.address, ca.gstin, ca.id_card_path, ca.status,
       ca.biz_approved_at, ca.sys_approved_at, ca.rejected_reason, ca.customer_id, ca.notified_at, ca.created_at,
       ca.account_type, ca.can_view_ready, ca.can_view_order, ca.brand,
       ca.last_seen_at, ca.last_latitude, ca.last_longitude, ca.last_location_at,
@@ -221,10 +221,12 @@ function activateAccount(account, approverId) {
     `).run(finalId, account.full_name, account.company_name || account.full_name, cleanPhone, account.email, account.address,
       resolvedState, account.account_type || 'Retailer', accountBrand, approverId, now, now);
     if (account.pin_code) db.prepare('UPDATE customers SET pin_code = ? WHERE id = ?').run(account.pin_code, finalId);
+    if (account.gstin) db.prepare('UPDATE customers SET gstin = ? WHERE id = ?').run(account.gstin, finalId);
     customer = { id: finalId };
   } else {
     db.prepare("UPDATE customers SET brand = COALESCE(brand, ?), phone = ?, state = COALESCE(NULLIF(state, ''), ?) WHERE id = ?")
       .run(accountBrand, cleanPhone, resolvedState, customer.id);
+    if (account.gstin) db.prepare('UPDATE customers SET gstin = COALESCE(gstin, ?) WHERE id = ?').run(account.gstin, customer.id);
   }
   db.prepare("UPDATE customer_accounts SET status = 'APPROVED', customer_id = ?, state = COALESCE(NULLIF(state, ''), ?), updated_at = ? WHERE id = ?")
     .run(customer.id, resolvedState, now, account.id);

@@ -89,6 +89,7 @@ function removeUpload(relPath) {
 }
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/x-matroska'];
 
 function imageFileFilter(label) {
   return (req, file, cb) => {
@@ -96,6 +97,18 @@ function imageFileFilter(label) {
       cb(null, true);
     } else {
       const err = new Error(`Only JPEG, PNG, WEBP and GIF image formats are allowed for ${label}`);
+      err.status = 400;
+      cb(err);
+    }
+  };
+}
+
+function videoFileFilter(label) {
+  return (req, file, cb) => {
+    if (VIDEO_MIME_TYPES.includes(file.mimetype) || (file.mimetype && file.mimetype.startsWith('video/'))) {
+      cb(null, true);
+    } else {
+      const err = new Error(`Only MP4, WebM, and MOV video formats are allowed for ${label}`);
       err.status = 400;
       cb(err);
     }
@@ -112,5 +125,6 @@ module.exports = {
   storeUploadedFile,
   ensureNamed,
   removeUpload,
-  imageFileFilter
+  imageFileFilter,
+  videoFileFilter
 };

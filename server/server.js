@@ -104,13 +104,14 @@ app.use('/api/pricing', require('./routes/pricing'));
 app.use('/api/portal', require('./routes/portal'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/payments', require('./routes/payments'));
 
 // Upload and unexpected errors return JSON with a real message instead of Express's bare 500 page
 app.use('/api', (err, req, res, next) => {
   if (res.headersSent) return next(err);
   if (err instanceof multer.MulterError) {
     const message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'Image is too large (max 10 MB)'
+      ? 'File is too large (max 100 MB for video / 10 MB for images)'
       : err.code === 'LIMIT_UNEXPECTED_FILE'
         ? `Unexpected upload field "${err.field}"`
         : err.message;

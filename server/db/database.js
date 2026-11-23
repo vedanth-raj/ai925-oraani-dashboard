@@ -710,6 +710,9 @@ function initializeSchema() {
     if (!productColumns4.includes('image_paths')) {
       db.prepare("ALTER TABLE products ADD COLUMN image_paths TEXT").run();
     }
+    if (!productColumns4.includes('video_path')) {
+      db.prepare("ALTER TABLE products ADD COLUMN video_path TEXT").run();
+    }
 
     // 16. Customer accounts: account type, which sections the customer may see, presence and last location
     const accountColumns2 = db.prepare("PRAGMA table_info(customer_accounts)").all().map(c => c.name);
@@ -720,7 +723,8 @@ function initializeSchema() {
       ['last_seen_at', 'TEXT'],
       ['last_latitude', 'REAL'],
       ['last_longitude', 'REAL'],
-      ['last_location_at', 'TEXT']
+      ['last_location_at', 'TEXT'],
+      ['gstin', 'TEXT']
     ];
     for (const [col, def] of accountAdds) {
       if (!accountColumns2.includes(col)) {

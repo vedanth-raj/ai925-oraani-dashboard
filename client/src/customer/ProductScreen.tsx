@@ -434,6 +434,7 @@ export const ProductScreen: React.FC<ProductScreenProps> = ({
       <div className="px-4 pt-4 space-y-4">
         <ImageCarousel
           images={product.image_paths && product.image_paths.length > 0 ? product.image_paths : product.image_path ? [product.image_path] : []}
+          video={product.video_path}
           alt={product.name}
         />
         <div>

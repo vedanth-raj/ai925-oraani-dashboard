@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Loader2, Image as ImageIcon, Crop, Trash2, Check, Plus, X, PackageCheck, Scale } from 'lucide-react';
+import { ArrowLeft, Loader2, Image as ImageIcon, Video, Crop, Trash2, Check, Plus, X, PackageCheck, Scale } from 'lucide-react';
 import { api, type PriceTier, type ProductOptionLists, type WeightSlab } from '../api';
 import { DEFAULT_WEIGHT_SLABS, tiersForMode, tierMaking } from '../pricing';
 import { OptionSelect } from '../components/OptionSelect';
@@ -121,6 +121,10 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
   const [cropQueue, setCropQueue] = useState<{ file: File; src: string }[]>([]);
   const uploadingImage = uploadingCount > 0;
 
+  // Product video
+  const [videoPath, setVideoPath] = useState<string | null>(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+
   // The product tables (prices follow the silver rate set on the Dashboard)
   const [readyRows, setReadyRows] = useState<ReadyRow[]>(isEditing ? [] : [emptyReady()]);
   const [weightRows, setWeightRows] = useState<WeightRow[]>(isEditing ? [] : [emptyWeight()]);
@@ -157,6 +161,7 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
             setDescription(p.description || '');
             setStatus(p.status === 'inactive' ? 'inactive' : 'active');
             setImagePaths(p.image_paths && p.image_paths.length > 0 ? p.image_paths : p.image_path ? [p.image_path] : []);
+            setVideoPath(p.video_path || null);
             setLegacyStock((res.variants || []).length === 0 ? Math.max(0, (p.physical_stock || 0) - (p.reserved_stock || 0)) : 0);
             setReadyRows((res.variants || []).map(v => ({
               std_weight_g: String(v.std_weight_g),
@@ -256,6 +261,35 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
 
   const removeImage = (i: number) => setImagePaths(list => list.filter((_, j) => j !== i));
   const makeCover = (i: number) => setImagePaths(list => [list[i], ...list.filter((_, j) => j !== i)]);
+
+  const handleVideoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (file.size > 100 * 1024 * 1024) {
+      setError('Video file is too large. Maximum size allowed is 100 MB.');
+      return;
+    }
+
+    try {
+      setUploadingVideo(true);
+      setError(null);
+      const fd = new FormData();
+      fd.append('name', name.trim() || sku.trim() || 'product');
+      fd.append('sku', sku.trim() || 'sku');
+      fd.append('video', file);
+
+      const res = await api.uploadProductVideo(fd);
+      if (res && res.file_path) {
+        setVideoPath(res.file_path);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload video');
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
 
   const setReady = (i: number, field: keyof ReadyRow, val: string) =>
     setReadyRows(rows => rows.map((r, j) => (j === i ? { ...r, [field]: val } : r)));
@@ -370,6 +404,7 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
         status,
         image_path: imagePaths[0] || null,
         image_paths: imagePaths,
+        video_path: videoPath || null,
         thickness: usedWeights[0]?.thickness || '',
         variants: usedReady.map(r => ({ std_weight_g: r.std_weight_g, size_inches: r.size_inches, stock_qty: r.stock_qty || '0' })),
         weight_columns: columns,
@@ -471,6 +506,50 @@ export const NewProductScreen: React.FC<NewProductScreenProps> = ({
           </div>
           <p className="text-[10px] text-[#766B60] mt-2">
             Pick one or more photos. Customers swipe through them (they also slide on their own); the cover shows in product lists. Non-square photos prompt to crop.
+          </p>
+        </div>
+
+        {/* Product Video */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold text-[#766B60] uppercase">
+              Product Video (optional)
+            </label>
+            {uploadingVideo && (
+              <span className="text-[#6B5744] flex items-center gap-1 font-semibold text-[11px]">
+                <Loader2 size={12} className="animate-spin" /> Uploading video...
+              </span>
+            )}
+          </div>
+
+          {videoPath ? (
+            <div className="relative rounded-xl overflow-hidden border border-[#D2BFA7] bg-black max-w-sm">
+              <video
+                src={videoPath}
+                controls
+                className="w-full max-h-56 object-contain"
+                playsInline
+              />
+              <button
+                type="button"
+                onClick={() => setVideoPath(null)}
+                title="Remove video"
+                aria-label="Remove product video"
+                className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-black text-white text-xs font-bold flex items-center gap-1 shadow-md transition-colors"
+              >
+                <Trash2 size={13} className="text-[#E07A5F]" /> Remove
+              </button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-[#D2BFA7] rounded-xl bg-[#F5F0E8]/40 hover:bg-[#F5F0E8] cursor-pointer transition-colors text-center">
+              <Video size={24} className="text-[#6B5744] mb-1.5" />
+              <span className="text-xs font-bold text-[#2F2923]">Upload product showcase video</span>
+              <span className="text-[10px] text-[#766B60] mt-0.5">MP4, WebM or MOV · up to 100 MB</span>
+              <input type="file" accept="video/mp4,video/webm,video/quicktime,video/*" onChange={handleVideoSelected} className="hidden" />
+            </label>
+          )}
+          <p className="text-[10px] text-[#766B60] mt-1.5">
+            Showcase shine, flexible links, and craftsmanship with a short video clip.
           </p>
         </div>
 

@@ -31,6 +31,7 @@ const StatePricingScreen = named(() => import('./screens/StatePricingScreen'), '
 const DeliveryChargesScreen = named(() => import('./screens/DeliveryChargesScreen'), 'DeliveryChargesScreen');
 const SlabDiscountsScreen = named(() => import('./screens/SlabDiscountsScreen'), 'SlabDiscountsScreen');
 const RequestsScreen = named(() => import('./screens/RequestsScreen'), 'RequestsScreen');
+const PaymentsScreen = named(() => import('./screens/PaymentsScreen'), 'PaymentsScreen');
 const CustomerAuthScreen = named(() => import('./customer/CustomerAuthScreen'), 'CustomerAuthScreen');
 const CustomerPortal = named(() => import('./customer/CustomerPortal'), 'CustomerPortal');
 
@@ -60,7 +61,8 @@ type SubView =
   | { type: 'state_pricing' }
   | { type: 'delivery_charges' }
   | { type: 'slab_discounts' }
-  | { type: 'requests'; tab: RequestsTab };
+  | { type: 'requests'; tab: RequestsTab }
+  | { type: 'payments' };
 
 // Signed-out entry: customer landing (sign in / sign up), customer portal, or staff login
 function PublicEntry() {
@@ -234,6 +236,7 @@ function MainApp() {
                   setViewStack([{ type: 'tab', tab: 'orders' }]);
                 }}
                 onOpenRequests={(tab) => pushView({ type: 'requests', tab })}
+                onOpenPayments={() => pushView({ type: 'payments' })}
               />
             );
           case 'orders':
@@ -429,6 +432,14 @@ function MainApp() {
         return (
           <RequestsScreen
             initialTab={currentView.tab}
+            onBack={popView}
+            onSelectOrder={(orderId) => pushView({ type: 'order_details', orderId })}
+          />
+        );
+
+      case 'payments':
+        return (
+          <PaymentsScreen
             onBack={popView}
             onSelectOrder={(orderId) => pushView({ type: 'order_details', orderId })}
           />

@@ -3,6 +3,7 @@ import { ArrowLeft, BarChart3, SlidersHorizontal, Check, X, Edit3, Trash2, Alert
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { ReadyStockTable, WeightOptionsTable, OrderQtyTable } from '../components/ProductTables';
+import { ImageCarousel } from '../components/ImageCarousel';
 import { perGramAllIn, round2, tierMaking, baseMakingFor } from '../pricing';
 
 interface ProductDetailsScreenProps {
@@ -212,15 +213,13 @@ export const ProductDetailsScreen: React.FC<ProductDetailsScreenProps> = ({
       )}
 
       <div className="px-4 pt-4 space-y-4">
-        {/* Prominent Square Product Image */}
-        {product.image_path && (
-          <div className="w-full aspect-square rounded-2xl overflow-hidden border border-[#D2BFA7] shadow-card bg-white">
-            <img
-              src={product.image_path}
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
+        {/* Prominent Square Product Image / Video Carousel */}
+        {((product.image_paths && product.image_paths.length > 0) || product.image_path || product.video_path) && (
+          <ImageCarousel
+            images={product.image_paths && product.image_paths.length > 0 ? product.image_paths : product.image_path ? [product.image_path] : []}
+            video={product.video_path}
+            alt={product.name}
+          />
         )}
 
         {/* Product Spec Card matching Screenshot Image 16 */}

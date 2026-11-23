@@ -10,9 +10,10 @@ interface DashboardScreenProps {
   onSelectStatus?: (status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | 'All') => void;
   onNavigateToOrders?: (filters?: { zone?: string; state?: string; city?: string; status?: string }) => void;
   onOpenRequests?: (tab: RequestsTab) => void;
+  onOpenPayments?: () => void;
 }
 
-export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onSelectStatus, onNavigateToOrders, onOpenRequests }) => {
+export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onSelectStatus, onNavigateToOrders, onOpenRequests, onOpenPayments }) => {
   const { user, isRep, isAdmin, isBusinessAdmin } = useAuth();
   const isStaffAdmin = isAdmin || isBusinessAdmin;
   const [requests, setRequests] = useState<RequestsSummary | null>(null);
@@ -192,16 +193,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onSelectStatus
               <p className="text-xl font-bold text-[#2F2923]">{requests?.on_order_open ?? '—'}</p>
               <p className="text-[11px] text-[#766B60]">new purchase requests</p>
             </button>
-            <div className="bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-3.5 shadow-card">
-              <div className="flex items-center gap-2 text-[#6B5744] mb-1">
-                <Wallet size={16} />
-                <span className="text-[11px] font-bold uppercase tracking-wider">Payments</span>
+            <button
+              type="button"
+              onClick={onOpenPayments}
+              className="text-left bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-3.5 shadow-card hover:border-[#6B5744] active:scale-[0.98] transition-all cursor-pointer w-full group"
+            >
+              <div className="flex items-center justify-between text-[#6B5744] mb-1">
+                <div className="flex items-center gap-2">
+                  <Wallet size={16} />
+                  <span className="text-[11px] font-bold uppercase tracking-wider">Payments</span>
+                </div>
+                <ChevronRight size={14} className="text-[#D2BFA7] group-hover:text-[#6B5744] group-hover:translate-x-0.5 transition-all" />
               </div>
               <p className="text-base font-bold text-[#4F7D5B]">{formatINR(requests?.payments_received || 0, 0)}</p>
               <p className="text-[11px] text-[#766B60]">
                 received · {formatINR(requests?.payments_outstanding || 0, 0)} due ({requests?.unpaid_orders || 0})
               </p>
-            </div>
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button
