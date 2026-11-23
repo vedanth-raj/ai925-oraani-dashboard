@@ -3,12 +3,13 @@
 // - Hashed build files (/assets/*) and icons: cache first; they never change under the same name
 // - API answers and uploaded files: never cached on the device, so customer, order and user data cannot be
 //   read back from the browser cache by the next person using the phone
-const CACHE_NAME = 'ai925-shell-v10';
+const CACHE_NAME = 'ai925-shell-v11';
 const SHELL = [
   '/',
   '/oraani',
   '/manifest.json',
   '/oraani-manifest.json',
+  '/razorpay-checkout.js',
   '/logo.png',
   '/oraani-logo.png',
   '/oraani-logo.svg',
@@ -39,7 +40,7 @@ self.addEventListener('activate', (event) => {
 });
 
 const isStaticAsset = (url) =>
-  url.pathname.startsWith('/assets/') || /^\/(logo|oraani-logo|oraani-logo@2x|icon-192|icon-512|apple-touch-icon|oraani-icon-192|oraani-icon-512|oraani-apple-touch-icon)\.(png|svg|jpg)$|^\/icon\.svg$|^\/(manifest|oraani-manifest)\.json$/.test(url.pathname);
+  url.pathname.startsWith('/assets/') || url.pathname === '/razorpay-checkout.js' || /^\/(logo|oraani-logo|oraani-logo@2x|icon-192|icon-512|apple-touch-icon|oraani-icon-192|oraani-icon-512|oraani-apple-touch-icon)\.(png|svg|jpg)$|^\/icon\.svg$|^\/(manifest|oraani-manifest)\.json$/.test(url.pathname);
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;

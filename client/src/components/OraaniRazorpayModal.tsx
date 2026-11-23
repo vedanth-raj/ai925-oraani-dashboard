@@ -13,38 +13,53 @@ interface OraaniRazorpayModalProps {
   onClose: () => void;
 }
 
-// Dynamically ensure Razorpay SDK script is loaded and ready
-function loadRazorpayScript(): Promise<boolean> {
+// Helper to inject a script element
+function injectScript(src: string): Promise<boolean> {
   return new Promise(resolve => {
-    if (typeof window !== 'undefined' && (window as any).Razorpay) {
-      resolve(true);
-      return;
+    try {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    } catch {
+      resolve(false);
     }
-    const existing = typeof document !== 'undefined' ? document.querySelector('script[src*="checkout.razorpay.com"]') : null;
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true));
-      existing.addEventListener('error', () => resolve(false));
-      let checks = 0;
-      const interval = setInterval(() => {
-        checks++;
-        if ((window as any).Razorpay) {
-          clearInterval(interval);
-          resolve(true);
-        } else if (checks > 25) {
-          clearInterval(interval);
-          resolve(Boolean((window as any).Razorpay));
-        }
-      }, 150);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.head.appendChild(script);
   });
+}
+
+// Dynamically ensure Razorpay SDK script is loaded and ready
+async function loadRazorpayScript(): Promise<boolean> {
+  if (typeof window !== 'undefined' && (window as any).Razorpay) {
+    return true;
+  }
+
+  // 1. If script is already in DOM, poll for window.Razorpay
+  const existing = typeof document !== 'undefined'
+    ? document.querySelector('script[src*="razorpay"]')
+    : null;
+
+  if (existing) {
+    for (let i = 0; i < 20; i++) {
+      if ((window as any).Razorpay) return true;
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+
+  // 2. Try loading self-hosted first (same-origin, cannot be blocked by DNS/ad-blockers)
+  const localOk = await injectScript('/razorpay-checkout.js');
+  if (localOk && (window as any).Razorpay) {
+    return true;
+  }
+
+  // 3. Fallback to official CDN
+  const cdnOk = await injectScript('https://checkout.razorpay.com/v1/checkout.js');
+  if (cdnOk && (window as any).Razorpay) {
+    return true;
+  }
+
+  return Boolean(typeof window !== 'undefined' && (window as any).Razorpay);
 }
 
 export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
@@ -56,6 +71,7 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
   onClose
 }) => {
   const brandConfig = getBrandConfig('ORAANI');
+  const cleanOrderNumber = String(orderNumber || '').replace(/^#+/, '');
   const hasPlans = Boolean(options && options.choices && options.advance && options.full);
   const [plan, setPlan] = useState<PaymentPlan>('ADVANCE');
   const [stage, setStage] = useState<'choose' | 'loading' | 'done'>('choose');
@@ -91,10 +107,10 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
         return;
       }
 
-      // 3. Load Razorpay Checkout JS
+      // 3. Load Razorpay Checkout JS (multi-tier loader)
       const loaded = await loadRazorpayScript();
       if (!loaded) {
-        throw new Error('Could not load Razorpay checkout SDK. Please check your internet connection.');
+        throw new Error('Could not load Razorpay checkout SDK. Please disable content/ad blockers or check your internet connection.');
       }
 
       // 4. Launch official Razorpay standard checkout
@@ -103,7 +119,7 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
         amount: rzpOrder.amount, // in paise
         currency: rzpOrder.currency || 'INR',
         name: brandConfig.displayName || 'Oraani',
-        description: `Order #${orderNumber}`,
+        description: `Order #${cleanOrderNumber}`,
         image: brandConfig.logoUrl || '/oraani-logo.svg',
         order_id: rzpOrder.razorpay_order_id,
         prefill: {
@@ -113,7 +129,7 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
         },
         notes: {
           order_id: orderId,
-          order_number: orderNumber,
+          order_number: cleanOrderNumber,
           brand: 'ORAANI'
         },
         theme: {
@@ -155,8 +171,8 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md bg-[#FFFCF7] border border-[#D2BFA7] rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#FFFCF7] border border-[#D2BFA7] rounded-2xl p-5 shadow-2xl max-h-[88vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-3.5">
           <div className="flex items-center gap-2">
@@ -191,7 +207,7 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
             </div>
             <h4 className="text-xl font-bold text-[#2F2923]">Payment Successful!</h4>
             <p className="text-xs text-[#766B60] mt-1.5">
-              {formatINR(payableAmount)} received for order <strong>#{orderNumber}</strong>.
+              {formatINR(payableAmount)} received for order <strong>#{cleanOrderNumber}</strong>.
             </p>
             <p className="text-[11px] text-[#4F7D5B] font-semibold mt-1">
               Verified by Oraani & Razorpay
@@ -217,7 +233,7 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
             {/* Order Amount Card */}
             <div className="bg-[#F5F0E8] border border-[#E8DCCB] rounded-xl p-3.5 mb-3 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#766B60]">Order #{orderNumber}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#766B60]">Order #{cleanOrderNumber}</p>
                 <p className="text-xs font-semibold text-[#2F2923]">Total Amount Due</p>
               </div>
               <p className="text-xl font-extrabold text-[#2F2923]">{formatINR(amountDue)}</p>
