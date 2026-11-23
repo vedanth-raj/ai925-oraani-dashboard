@@ -551,6 +551,23 @@ export const api = {
   savePaymentTerms: (data: PaymentTerms) =>
     request<{ payment_terms: PaymentTerms; message: string }>('/pricing/payment-terms', { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Oraani Razorpay payment gateway configuration
+  getRazorpaySettings: () =>
+    request<{
+      key_id: string;
+      has_secret: boolean;
+      webhook_secret?: string;
+      is_active: boolean;
+      is_configured: boolean;
+      is_test_mode: boolean;
+      is_env_configured: boolean;
+    }>('/pricing/razorpay'),
+  saveRazorpaySettings: (data: { key_id: string; key_secret?: string; webhook_secret?: string; is_active?: boolean }) =>
+    request<{ message: string; settings: any }>('/pricing/razorpay', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
   // Dummy payment gateway (staff collecting payment)
   collectOrderPayment: (orderId: string, data: { method: string; amount?: number }) =>
     request<{ payment: any; order: any; message: string }>(`/orders/${orderId}/payments`, {
@@ -703,6 +720,34 @@ export const portalApi = {
     portalRequest<{ payment: any; order: any; message: string }>(`/orders/${orderId}/pay`, {
       method: 'POST',
       body: JSON.stringify({ method, plan })
+    }),
+  getPaymentConfig: () =>
+    portalRequest<{
+      brand: string;
+      razorpay_enabled: boolean;
+      razorpay_key_id: string | null;
+      is_test_mode: boolean;
+      is_configured: boolean;
+    }>('/payment-config'),
+  createRazorpayOrder: (orderId: string, plan?: PaymentPlan) =>
+    portalRequest<{
+      razorpay_order_id: string;
+      amount: number;
+      currency: string;
+      key_id: string;
+      order_id: string;
+      order_number: string;
+      brand: string;
+      is_simulated: boolean;
+      customer: { name: string; phone: string; email: string };
+    }>(`/orders/${orderId}/razorpay/create-order`, {
+      method: 'POST',
+      body: JSON.stringify({ plan })
+    }),
+  verifyRazorpayPayment: (orderId: string, data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string; plan?: PaymentPlan }) =>
+    portalRequest<{ payment: any; order: any; message: string }>(`/orders/${orderId}/razorpay/verify`, {
+      method: 'POST',
+      body: JSON.stringify(data)
     }),
   deliveryQuote: (amount: number, weightGrams = 0) =>
     portalRequest<{ delivery: DeliveryQuote; payment_terms: PaymentTerms }>(`/delivery-quote?amount=${encodeURIComponent(amount.toFixed(2))}&weight_grams=${encodeURIComponent(weightGrams.toString())}`),

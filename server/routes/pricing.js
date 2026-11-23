@@ -13,6 +13,7 @@ const {
   setSetting
 } = require('../utils/pricing');
 const { getDeliveryRates, parseDeliveryRates, getPaymentTerms, parsePaymentTerms, setJson } = require('../services/commerce');
+const { getRazorpayConfig, saveRazorpayConfig } = require('../services/razorpay');
 
 const uploadExcel = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -404,6 +405,35 @@ router.delete('/delivery-weight-slabs/:id', authenticateToken, requireAdminOrBus
     message: 'Delivery weight slab removed',
     delivery_weight_slabs: db.prepare('SELECT * FROM delivery_weight_slabs ORDER BY min_weight_g ASC').all()
   });
+});
+
+// GET /api/pricing/razorpay (Oraani Razorpay configuration for Admin)
+router.get('/razorpay', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  const config = getRazorpayConfig();
+  res.json({
+    key_id: config.key_id,
+    has_secret: Boolean(config.key_secret),
+    webhook_secret: config.webhook_secret,
+    is_active: config.is_active,
+    is_configured: config.is_configured,
+    is_test_mode: config.is_test_mode,
+    is_env_configured: config.is_env_configured
+  });
+});
+
+// POST /api/pricing/razorpay (Save Oraani Razorpay settings)
+router.post('/razorpay', authenticateToken, requireAdminOrBusinessAdmin, (req, res) => {
+  try {
+    const { key_id, key_secret, webhook_secret, is_active } = req.body;
+    const result = saveRazorpayConfig({ key_id, key_secret, webhook_secret, is_active });
+    logAudit(req.user.id, 'UPDATE_RAZORPAY_CONFIG', 'app_settings', 'oraani_razorpay_settings', `Updated Oraani Razorpay configuration (Key: ${result.key_id || 'none'}, active: ${result.is_active})`, req);
+    res.json({
+      message: 'Oraani Razorpay settings saved successfully',
+      settings: result
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to save Razorpay settings' });
+  }
 });
 
 module.exports = router;

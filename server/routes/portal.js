@@ -22,6 +22,7 @@ const { customerPin, deliveryChargeFor, getPaymentTerms } = require('../services
 const { encrypt } = require('../utils/secrets');
 const { generateAndSendOtp, verifyOtp } = require('../services/otpService');
 const { lookupPincode } = require('../services/pincodeService');
+const { getRazorpayConfig, createRazorpayOrder, verifyPaymentSignature, verifyWebhookSignature } = require('../services/razorpay');
 
 const ID_CARDS_DIR = uploadsSubdir('id_cards');
 
@@ -567,7 +568,7 @@ router.post('/checkout', authenticateCustomer, requireApprovedCustomer, (req, re
         silverRate: rate,
         movementUserId: creatorId,
         deliveryCharge: delivery.charge,
-        brand: account.brand || 'AI925'
+        brand: account.brand === 'BOTH' ? resolveRequestBrand(req) : (account.brand || 'AI925')
       });
 
       for (const u of stockUpdates) {
@@ -630,7 +631,21 @@ router.get('/orders/:id', authenticateCustomer, requireApprovedCustomer, (req, r
   res.json({ order, items, payments, images, payment_options: paymentOptions(order) });
 });
 
-// POST /api/portal/orders/:id/pay (Dummy payment gateway)
+// GET /api/portal/payment-config
+router.get('/payment-config', authenticateCustomer, (req, res) => {
+  const targetBrand = resolveRequestBrand(req);
+  const rzp = getRazorpayConfig();
+  const isOraani = targetBrand === 'ORAANI' || (req.customer && req.customer.brand === 'ORAANI');
+  res.json({
+    brand: targetBrand,
+    razorpay_enabled: Boolean(isOraani && rzp.is_active),
+    razorpay_key_id: isOraani && rzp.is_active ? (rzp.key_id || 'rzp_test_simulated') : null,
+    is_test_mode: rzp.is_test_mode,
+    is_configured: rzp.is_configured
+  });
+});
+
+// POST /api/portal/orders/:id/pay (Standard / dummy payment gateway for AI925 and non-Razorpay flows)
 router.post('/orders/:id/pay', authenticateCustomer, requireApprovedCustomer, (req, res) => {
   const order = ownOrder(req, res);
   if (!order) return;
@@ -644,6 +659,144 @@ router.post('/orders/:id/pay', authenticateCustomer, requireApprovedCustomer, (r
   } catch (err) {
     res.status(400).json({ error: err.message || 'Payment failed' });
   }
+});
+
+// POST /api/portal/orders/:id/razorpay/create-order (Generate Razorpay Order — strictly for Oraani)
+router.post('/orders/:id/razorpay/create-order', authenticateCustomer, requireApprovedCustomer, async (req, res) => {
+  const order = ownOrder(req, res);
+  if (!order) return;
+
+  const orderBrand = String(order.brand || 'AI925').toUpperCase();
+  if (orderBrand !== 'ORAANI') {
+    return res.status(403).json({ error: 'Razorpay payment is only available for Oraani brand orders.' });
+  }
+
+  const { plan } = req.body;
+  const options = paymentOptions(order);
+  let amountRupees = options.due;
+
+  if (options.choices) {
+    if (plan === 'FULL') {
+      amountRupees = options.full.amount;
+    } else {
+      amountRupees = options.advance.amount;
+    }
+  }
+
+  if (!(amountRupees > 0)) {
+    return res.status(400).json({ error: 'This order is already fully paid.' });
+  }
+
+  try {
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(order.customer_id);
+    const rzpOrder = await createRazorpayOrder({
+      order,
+      amountRupees,
+      receipt: order.order_number,
+      notes: {
+        plan: options.choices ? (plan === 'FULL' ? 'FULL' : 'ADVANCE') : 'STANDARD',
+        customer_id: order.customer_id
+      }
+    });
+
+    res.json({
+      razorpay_order_id: rzpOrder.id,
+      amount: rzpOrder.amount, // in paise
+      currency: rzpOrder.currency,
+      key_id: rzpOrder.key_id,
+      order_id: order.id,
+      order_number: order.order_number,
+      brand: 'ORAANI',
+      is_simulated: rzpOrder.is_simulated,
+      customer: {
+        name: (customer && customer.poc_name) || req.customer.full_name,
+        phone: (customer && customer.phone) || req.customer.phone,
+        email: (customer && customer.email) || req.customer.email || ''
+      }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to initiate Razorpay payment' });
+  }
+});
+
+// POST /api/portal/orders/:id/razorpay/verify (Verify HMAC signature & record payment — strictly for Oraani)
+router.post('/orders/:id/razorpay/verify', authenticateCustomer, requireApprovedCustomer, (req, res) => {
+  const order = ownOrder(req, res);
+  if (!order) return;
+
+  const orderBrand = String(order.brand || 'AI925').toUpperCase();
+  if (orderBrand !== 'ORAANI') {
+    return res.status(403).json({ error: 'Razorpay is only available for Oraani brand orders.' });
+  }
+
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan } = req.body;
+  if (!razorpay_payment_id) {
+    return res.status(400).json({ error: 'Missing Razorpay payment ID' });
+  }
+
+  const isValid = verifyPaymentSignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature });
+  if (!isValid) {
+    return res.status(400).json({ error: 'Invalid Razorpay payment signature. Payment cannot be verified.' });
+  }
+
+  try {
+    const payment = payWithPlan({
+      order,
+      method: 'RAZORPAY',
+      plan,
+      paidByType: 'CUSTOMER',
+      paidById: req.customer.id,
+      gatewayRef: razorpay_payment_id
+    });
+
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
+    res.status(200).json({
+      payment,
+      order: updated,
+      message: 'Payment completed and verified successfully!'
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Payment processing failed' });
+  }
+});
+
+// POST /api/portal/razorpay/webhook (Asynchronous webhook notifications from Razorpay)
+router.post('/razorpay/webhook', (req, res) => {
+  const signature = req.headers['x-razorpay-signature'];
+  const rawBody = req.rawBody || JSON.stringify(req.body);
+  const isValid = verifyWebhookSignature(rawBody, signature);
+  const config = getRazorpayConfig();
+
+  if (!isValid && config.webhook_secret) {
+    return res.status(400).json({ error: 'Invalid webhook signature' });
+  }
+
+  const event = req.body && req.body.event;
+  const paymentObj = req.body && req.body.payload && req.body.payload.payment && req.body.payload.payment.entity;
+
+  if (event === 'payment.captured' && paymentObj) {
+    const orderId = paymentObj.notes && paymentObj.notes.order_id;
+    const paymentId = paymentObj.id;
+    if (orderId && paymentId) {
+      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+      if (order && order.brand === 'ORAANI') {
+        const existing = db.prepare('SELECT * FROM payments WHERE gateway_ref = ?').get(paymentId);
+        if (!existing) {
+          const plan = paymentObj.notes && paymentObj.notes.plan;
+          payWithPlan({
+            order,
+            method: 'RAZORPAY',
+            plan: plan !== 'STANDARD' ? plan : undefined,
+            paidByType: 'CUSTOMER',
+            paidById: paymentObj.notes?.customer_id || null,
+            gatewayRef: paymentId
+          });
+        }
+      }
+    }
+  }
+
+  res.status(200).json({ status: 'ok' });
 });
 
 // GET /api/portal/delivery-quote?amount=&weight_grams= (delivery charge for this customer's PIN code / weight slab at an order value)

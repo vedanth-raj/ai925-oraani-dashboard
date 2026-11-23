@@ -56,6 +56,9 @@ async function run() {
     console.log('>>> [9/9] Running Brand Access Permission & Login Restriction Tests...\n');
     execSync('node tests/test_brand_access_restriction.js', { stdio: 'inherit' });
 
+    console.log('>>> [10/10] Running Oraani Razorpay Payment Gateway Tests...\n');
+    execSync('node tests/test_oraani_razorpay.js', { stdio: 'inherit' });
+
     console.log('\n======================================================');
     console.log(' ALL SUITES PASSED CLEANLY');
     console.log('======================================================\n');

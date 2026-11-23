@@ -3,6 +3,8 @@ import { Minus, Plus, Trash2, ShoppingBag, AlertTriangle, Loader2 } from 'lucide
 import { portalApi, type CatalogProduct, type DeliveryQuote, type PaymentOptions, type SilverRate, type WeightSlabDiscount } from '../api';
 import { PriceBreakdown } from '../components/PriceBreakdown';
 import { DummyPaymentModal } from '../components/DummyPaymentModal';
+import { OraaniRazorpayModal } from '../components/OraaniRazorpayModal';
+import { getActiveBrand } from '../brand';
 import { formatINR, round2, MIN_ORDER_GRAMS } from '../pricing';
 import { type Carts, type CartLine, type PurchaseMode, MODE_LABEL, priceCart } from './cart';
 import { useCustomerSession } from './customerSession';
@@ -283,18 +285,35 @@ export const CartScreen: React.FC<CartScreenProps> = ({ carts, initialMode, onCh
       )}
 
       {placedOrder && (
-        <DummyPaymentModal
-          orderNumber={placedOrder.order.order_number}
-          amountDue={placedOrder.order.total_amount}
-          options={placedOrder.options}
-          onPay={async (method, _amount, plan) => {
-            await portalApi.pay(placedOrder.order.id, method, plan);
-          }}
-          onClose={() => {
-            setPlacedOrder(null);
-            onOrderPlaced();
-          }}
-        />
+        placedOrder.order?.brand === 'ORAANI' || getActiveBrand() === 'ORAANI' ? (
+          <OraaniRazorpayModal
+            orderId={placedOrder.order.id}
+            orderNumber={placedOrder.order.order_number}
+            amountDue={placedOrder.order.total_amount}
+            options={placedOrder.options}
+            onSuccess={() => {
+              setPlacedOrder(null);
+              onOrderPlaced();
+            }}
+            onClose={() => {
+              setPlacedOrder(null);
+              onOrderPlaced();
+            }}
+          />
+        ) : (
+          <DummyPaymentModal
+            orderNumber={placedOrder.order.order_number}
+            amountDue={placedOrder.order.total_amount}
+            options={placedOrder.options}
+            onPay={async (method, _amount, plan) => {
+              await portalApi.pay(placedOrder.order.id, method, plan);
+            }}
+            onClose={() => {
+              setPlacedOrder(null);
+              onOrderPlaced();
+            }}
+          />
+        )
       )}
     </div>
   );

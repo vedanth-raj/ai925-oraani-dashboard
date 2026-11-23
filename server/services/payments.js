@@ -2,10 +2,10 @@ const { db } = require('../db/database');
 const { round2 } = require('../utils/pricing');
 const { getPaymentTerms } = require('./commerce');
 
-// Dummy gateway: every attempt succeeds. Swap recordPayment's body for a real gateway call later.
-const PAYMENT_METHODS = ['UPI', 'CARD', 'NET_BANKING', 'CASH'];
+// Dummy & real gateways (Razorpay for Oraani).
+const PAYMENT_METHODS = ['UPI', 'CARD', 'NET_BANKING', 'CASH', 'RAZORPAY'];
 
-function recordPayment({ order, amount, method, paidByType, paidById }) {
+function recordPayment({ order, amount, method, paidByType, paidById, gatewayRef }) {
   const due = round2((order.total_amount || 0) - (order.paid_amount || 0));
   const payAmount = amount !== undefined && amount !== null && amount !== '' ? round2(parseFloat(amount)) : due;
   if (!(payAmount > 0)) {
@@ -13,14 +13,14 @@ function recordPayment({ order, amount, method, paidByType, paidById }) {
   }
 
   const id = 'pay_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
-  const gatewayRef = 'DUMMY' + Date.now().toString().slice(-8) + Math.random().toString(36).substring(2, 6).toUpperCase();
+  const ref = gatewayRef || ('DUMMY' + Date.now().toString().slice(-8) + Math.random().toString(36).substring(2, 6).toUpperCase());
   const now = new Date().toISOString();
 
   db.transaction(() => {
     db.prepare(`
       INSERT INTO payments (id, order_id, amount, method, status, gateway_ref, paid_by_type, paid_by_id, created_at)
       VALUES (?, ?, ?, ?, 'SUCCESS', ?, ?, ?, ?)
-    `).run(id, order.id, payAmount, method, gatewayRef, paidByType, paidById, now);
+    `).run(id, order.id, payAmount, method, ref, paidByType, paidById, now);
 
     const paid = round2((order.paid_amount || 0) + payAmount);
     const total = order.total_amount || 0;
@@ -51,10 +51,10 @@ function paymentOptions(order) {
 }
 
 // plan: 'ADVANCE' | 'FULL' (ignored once the order has a payment)
-function payWithPlan({ order, method, plan, paidByType, paidById }) {
+function payWithPlan({ order, method, plan, paidByType, paidById, gatewayRef }) {
   const options = paymentOptions(order);
   if (!options.choices) {
-    return recordPayment({ order, method, paidByType, paidById });
+    return recordPayment({ order, method, paidByType, paidById, gatewayRef });
   }
   if (plan !== 'ADVANCE' && plan !== 'FULL') {
     throw new Error('Choose 20% advance or full payment');
@@ -63,12 +63,12 @@ function payWithPlan({ order, method, plan, paidByType, paidById }) {
     const now = new Date().toISOString();
     if (plan === 'ADVANCE') {
       db.prepare("UPDATE orders SET payment_plan = 'ADVANCE', updated_at = ? WHERE id = ?").run(now, order.id);
-      return recordPayment({ order, method, amount: options.advance.amount, paidByType, paidById });
+      return recordPayment({ order, method, amount: options.advance.amount, paidByType, paidById, gatewayRef });
     }
     db.prepare("UPDATE orders SET payment_plan = 'FULL', discount_amount = ?, total_amount = ?, updated_at = ? WHERE id = ?")
       .run(options.full.discount, options.full.amount, now, order.id);
     const discounted = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
-    return recordPayment({ order: discounted, method, paidByType, paidById });
+    return recordPayment({ order: discounted, method, paidByType, paidById, gatewayRef });
   })();
 }
 

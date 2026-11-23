@@ -11,6 +11,7 @@ import { useAuth } from '../auth';
 import { SilverRateCard } from '../components/SilverRateCard';
 import { CommerceSettingsCard } from '../components/CommerceSettingsCard';
 import { StatePremiumCard } from '../components/StatePremiumCard';
+import { RazorpaySettingsCard } from '../components/RazorpaySettingsCard';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -531,6 +532,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
             <SilverRateCard canManage={false} />
             <p className="text-[11px] text-[#766B60] -mt-2 px-1">To change the silver rate, use the Dashboard. Every price follows it automatically.</p>
             <CommerceSettingsCard />
+            <RazorpaySettingsCard />
           </>
         )}
 

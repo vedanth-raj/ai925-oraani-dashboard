@@ -3,6 +3,8 @@ import { ArrowLeft, ChevronRight, Loader2, Package, Camera, X, ChevronLeft } fro
 import { portalApi, type OrderImage } from '../api';
 import { PriceBreakdown } from '../components/PriceBreakdown';
 import { DummyPaymentModal, PaymentStatusBadge } from '../components/DummyPaymentModal';
+import { OraaniRazorpayModal } from '../components/OraaniRazorpayModal';
+import { getActiveBrand } from '../brand';
 import { formatINR, round2 } from '../pricing';
 
 const statusLabel: Record<string, { text: string; cls: string }> = {
@@ -158,13 +160,30 @@ const OrderDetail: React.FC<{ orderId: string; onBack: () => void }> = ({ orderI
       </div>
 
       {payOpen && (
-        <DummyPaymentModal
-          orderNumber={order.order_number}
-          amountDue={due}
-          options={payment_options}
-          onPay={async (method, _amount, plan) => { await portalApi.pay(order.id, method, plan); }}
-          onClose={() => { setPayOpen(false); load(); }}
-        />
+        order.brand === 'ORAANI' || getActiveBrand() === 'ORAANI' ? (
+          <OraaniRazorpayModal
+            orderId={order.id}
+            orderNumber={order.order_number}
+            amountDue={due}
+            options={payment_options}
+            onSuccess={() => {
+              setPayOpen(false);
+              load();
+            }}
+            onClose={() => {
+              setPayOpen(false);
+              load();
+            }}
+          />
+        ) : (
+          <DummyPaymentModal
+            orderNumber={order.order_number}
+            amountDue={due}
+            options={payment_options}
+            onPay={async (method, _amount, plan) => { await portalApi.pay(order.id, method, plan); }}
+            onClose={() => { setPayOpen(false); load(); }}
+          />
+        )
       )}
     </div>
   );
