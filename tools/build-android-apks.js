@@ -30,7 +30,18 @@ if (!fs.existsSync(BUILD_DIR)) fs.mkdirSync(BUILD_DIR, { recursive: true });
 
 // 1. Ensure Keystore for signing
 const KEYSTORE_FILE = path.join(BUILD_DIR, 'release.keystore');
-const KEY_PASS = 'ai925oraani2026';
+const KEY_PASS_FILE = path.join(BUILD_DIR, '.keystore_pass');
+let KEY_PASS = process.env.ANDROID_KEYSTORE_PASS;
+
+if (!KEY_PASS && fs.existsSync(KEY_PASS_FILE)) {
+  KEY_PASS = fs.readFileSync(KEY_PASS_FILE, 'utf8').trim();
+}
+
+if (!KEY_PASS) {
+  KEY_PASS = require('crypto').randomBytes(16).toString('hex');
+  fs.writeFileSync(KEY_PASS_FILE, KEY_PASS, 'utf8');
+}
+
 const KEY_ALIAS = 'portal';
 
 if (!fs.existsSync(KEYSTORE_FILE)) {
