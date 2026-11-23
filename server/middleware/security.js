@@ -5,12 +5,12 @@ const { UPLOAD_SIGNING_KEY } = require('../utils/serverKeys');
 // ---------- Security headers ----------
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://apis.google.com https://checkout.razorpay.com",
+  "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://apis.google.com https://www.recaptcha.net https://checkout.razorpay.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data: blob: https://www.google.com/recaptcha/ https://www.gstatic.com/ https://*.razorpay.com https://cdn.razorpay.com",
+  "img-src 'self' data: blob: https://www.google.com https://www.gstatic.com https://*.razorpay.com https://cdn.razorpay.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.google.com/recaptcha/ https://*.googleapis.com https://api.razorpay.com https://*.razorpay.com",
-  "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://api.razorpay.com https://checkout.razorpay.com",
+  "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.google.com https://*.googleapis.com https://www.recaptcha.net https://*.firebaseapp.com https://api.razorpay.com https://*.razorpay.com",
+  "frame-src 'self' https://www.google.com https://recaptcha.google.com https://www.recaptcha.net https://*.firebaseapp.com https://api.razorpay.com https://checkout.razorpay.com",
   "manifest-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
