@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ShieldCheck, Loader2, CheckCircle2, Smartphone, CreditCard, Landmark, AlertCircle, Sparkles } from 'lucide-react';
 import { formatINR } from '../pricing';
 import { portalApi, type PaymentOptions, type PaymentPlan } from '../api';
@@ -13,19 +13,37 @@ interface OraaniRazorpayModalProps {
   onClose: () => void;
 }
 
-// Dynamically load Razorpay SDK script
+// Dynamically ensure Razorpay SDK script is loaded and ready
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise(resolve => {
-    if ((window as any).Razorpay) {
+    if (typeof window !== 'undefined' && (window as any).Razorpay) {
       resolve(true);
+      return;
+    }
+    const existing = typeof document !== 'undefined' ? document.querySelector('script[src*="checkout.razorpay.com"]') : null;
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      let checks = 0;
+      const interval = setInterval(() => {
+        checks++;
+        if ((window as any).Razorpay) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (checks > 25) {
+          clearInterval(interval);
+          resolve(Boolean((window as any).Razorpay));
+        }
+      }, 150);
       return;
     }
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
+    script.crossOrigin = 'anonymous';
     script.onload = () => resolve(true);
     script.onerror = () => resolve(false);
-    document.body.appendChild(script);
+    document.head.appendChild(script);
   });
 }
 
@@ -42,6 +60,11 @@ export const OraaniRazorpayModal: React.FC<OraaniRazorpayModalProps> = ({
   const [plan, setPlan] = useState<PaymentPlan>('ADVANCE');
   const [stage, setStage] = useState<'choose' | 'loading' | 'done'>('choose');
   const [error, setError] = useState<string | null>(null);
+
+  // Pre-fetch Razorpay SDK immediately when modal opens
+  useEffect(() => {
+    loadRazorpayScript().catch(() => {});
+  }, []);
 
   const payableAmount = hasPlans
     ? (plan === 'ADVANCE' ? options!.advance!.amount : options!.full!.amount)
